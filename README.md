@@ -28,5 +28,6 @@ Zatim otvori `http://localhost:4173`.
 - AI chat sa brzim pitanjima, glasovnim unosom i mjesečnom/godišnjom procjenom uštede;
 - instalacija na početni ekran i offline app shell;
 - izvoz i uvoz transakcija, limita i cilja štednje pri promjeni uređaja ili browsera.
+- zaključan prikaz bez pinch zooma i swipe-down zatvaranje popup prozora.
 
 Podaci u ovoj verziji ostaju samo u browseru uređaja. Cloud nalog, sinhronizacija i pravi AI servis su naredna razvojna faza.

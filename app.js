@@ -834,6 +834,51 @@ document.querySelectorAll("[data-nav]").forEach((button) => {
   button.addEventListener("click", () => navigateToPage(button.dataset.nav));
 });
 
+function enableSwipeToDismiss(sheet) {
+  const card = sheet.querySelector(".sheet-card");
+  if (!card) return;
+  let startY = null;
+  let dragging = false;
+  const resetCard = () => {
+    card.style.transition = "transform .2s ease";
+    card.style.transform = "translateY(0)";
+    window.setTimeout(() => { card.style.transition = ""; card.style.transform = ""; }, 220);
+    startY = null;
+    dragging = false;
+  };
+  card.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" || card.scrollTop > 0) return;
+    startY = event.clientY;
+    dragging = true;
+    card.setPointerCapture?.(event.pointerId);
+  });
+  card.addEventListener("pointermove", (event) => {
+    if (!dragging || startY === null) return;
+    const distance = event.clientY - startY;
+    if (distance <= 0) return;
+    card.style.transition = "none";
+    card.style.transform = `translateY(${Math.min(distance, 180)}px)`;
+  });
+  card.addEventListener("pointerup", (event) => {
+    if (!dragging || startY === null) return;
+    const distance = event.clientY - startY;
+    if (distance > 90) {
+      card.style.transition = "transform .18s ease";
+      card.style.transform = "translateY(100%)";
+      window.setTimeout(() => {
+        if (sheet.open) sheet.close("cancel");
+        resetCard();
+      }, 180);
+    } else {
+      resetCard();
+    }
+  });
+  card.addEventListener("pointercancel", resetCard);
+  sheet.addEventListener("close", resetCard);
+}
+
+document.querySelectorAll("dialog.sheet").forEach(enableSwipeToDismiss);
+
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   state.installPrompt = event;
