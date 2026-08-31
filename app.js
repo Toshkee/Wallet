@@ -618,6 +618,41 @@ function parseVoiceInput(transcript) {
   };
 }
 
+function isTransactionCommand(text) {
+  const normalized = text.toLocaleLowerCase("sr");
+  return ["dodaj", "unesi", "upiši", "upisi", "stavi", "evidentiraj", "zabilježi", "zabiljezi", "zapiši", "zapisi"]
+    .some((word) => normalized.includes(word));
+}
+
+function transactionDateFromText(text) {
+  const normalized = text.toLocaleLowerCase("sr");
+  if (normalized.includes("juče") || normalized.includes("juce")) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return localDate(yesterday);
+  }
+  return localDate();
+}
+
+function addTransactionFromChat(text) {
+  if (!isTransactionCommand(text)) return { transaction: null, needsAmount: false };
+  const parsed = parseVoiceInput(text);
+  const amount = Number(String(parsed.amount).replace(",", "."));
+  if (!Number.isFinite(amount) || amount <= 0) return { transaction: null, needsAmount: true };
+  const transaction = {
+    id: crypto.randomUUID(),
+    type: parsed.type,
+    amount,
+    category: parsed.category,
+    date: transactionDateFromText(text),
+    note: parsed.category === "Prevoz" && text.toLocaleLowerCase("sr").includes("gorivo") ? "Gorivo" : parsed.note,
+  };
+  state.transactions.push(transaction);
+  saveTransactions();
+  renderDashboard();
+  return { transaction, needsAmount: false };
+}
+
 function legacyStartVoiceInput() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -668,6 +703,22 @@ async function answerAiQuestion(questionOverride = "") {
   const question = originalQuestion.toLocaleLowerCase("sr");
   if (!question) return;
   appendChatMessage("user", originalQuestion);
+  const chatTransaction = addTransactionFromChat(originalQuestion);
+  if (chatTransaction.needsAmount) {
+    elements.aiQuestion.value = "";
+    window.setTimeout(() => appendChatMessage("assistant", "Mogu. Samo mi napiši iznos, na primjer: „Dodaj danas 20 € za gorivo“."), 120);
+    return;
+  }
+  if (chatTransaction.transaction) {
+    const item = chatTransaction.transaction;
+    const kind = item.type === "income" ? "prihod" : "trošak";
+    const dateLabel = item.date === localDate() ? "za danas" : "za juče";
+    const confirmation = `Dodao sam ${kind} od ${formatMoney(item.amount)} za ${item.category} ${dateLabel}.`;
+    elements.aiQuestion.value = "";
+    buildAiPlan(confirmation);
+    window.setTimeout(() => appendChatMessage("assistant", confirmation), 120);
+    return;
+  }
   const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate()));
   const summary = totals(monthTransactions);
   const restaurants = monthlyRestaurantSpend();
