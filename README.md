@@ -1,25 +1,39 @@
 # Vibe Wallet
 
-Mobilni PWA za praćenje prihoda, troškova i moguće uštede, vizuelno usklađen sa VibeLab identitetom.
+Mobilni PWA za praćenje prihoda, troškova, limita i ciljeva štednje, sa VibeLab dark identitetom.
 
-## Trenutno radi
+## Lokalno pokretanje
 
-- dnevni, nedjeljni i mjesečni pregled;
-- odvojeni ekrani za AI, pregled, unose i plan;
-- navigacija kroz prethodne dane, neđelje i mjesece;
-- unos prihoda i troškova;
-- prilagodljivi mjesečni limiti po kategorijama;
-- kompletan pregled i brisanje evidentiranih transakcija;
-- uređivanje postojećih transakcija;
-- cilj štednje sa rokom, napretkom i potrebnim mjesečnim iznosom;
-- lokalno čuvanje podataka u browseru;
-- automatski pregled kategorija i posljednjih sedam dana;
-- glasovno popunjavanje unosa u browserima koji podržavaju Speech Recognition;
-- AI chat sa brzim pitanjima, glasovnim unosom i mjesečnom/godišnjom procjenom uštede;
-- instalacija na početni ekran i offline app shell;
-- izvoz i uvoz transakcija, limita i cilja štednje pri promjeni uređaja ili browsera.
-- zaključan prikaz bez pinch zooma i swipe-down zatvaranje popup prozora.
+```powershell
+python -m http.server 4173
+```
 
-Podaci u ovoj verziji ostaju samo u browseru uređaja. Cloud nalog, sinhronizacija i pravi AI servis su naredna razvojna faza.
+Zatim otvori `http://localhost:4173`.
 
-Nova instalacija počinje bez demo transakcija i bez unaprijed postavljenog cilja štednje.
+## Funkcionalnosti
+
+- AI početni ekran sa Gemini odgovorima i brzim pitanjima;
+- unos troškova i prihoda kroz formu, chat komandu ili glas;
+- glasovni diktat prvo popunjava chat polje, pa korisnik odlučuje kada šalje;
+- dnevni, nedjeljni i mjesečni pregled, sa kretanjem kroz ranije periode;
+- mjesečni limiti kategorija i plan cilja štednje;
+- uređivanje, brisanje, izvoz i uvoz lokalnih unosa;
+- instalabilna PWA aplikacija, offline app shell i swipe-down zatvaranje modala.
+
+## Gemini na Vercelu
+
+Dodaj `GEMINI_API_KEY` u Vercel Project Settings → Environment Variables za Production. Opcionalne varijable su `GEMINI_MODEL` i `GEMINI_VOICE_MODEL`; podrazumijevani model je `gemini-2.5-flash`.
+
+API ključ ostaje samo na Vercelu. Chat endpoint šalje Gemini-ju sažetak, limite, cilj i ograničen broj transakcija bez privatnih napomena. Voice endpoint šalje kratki snimak samo kada korisnik aktivira mikrofon.
+
+## Podaci i privatnost
+
+Transakcije, limiti i cilj čuvaju se lokalno u browseru uređaja. Izvoz backup-a je preporučen prije promjene telefona, browsera ili ponovne instalacije PWA aplikacije.
+
+## Provjere
+
+```powershell
+node --check app.js
+node --check sw.js
+node scripts/check-dom.js
+```

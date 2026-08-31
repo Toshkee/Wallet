@@ -1,15 +1,31 @@
+export const config = {
+  api: { bodyParser: { sizeLimit: "2mb" } }
+};
+
+function isSameOriginRequest(req) {
+  const origin = req.headers.origin;
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  try {
+    return Boolean(origin && host && new URL(origin).host === host);
+  } catch {
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
   }
+  if (!isSameOriginRequest(req)) return res.status(403).json({ error: "Invalid request origin" });
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "Gemini API key is not configured" });
   const body = req.body || {};
   const question = String(body.question || "").trim();
-  if (!question) return res.status(400).json({ error: "Question is required" });
+  if (!question || question.length > 1000) return res.status(400).json({ error: "Question is required and must be under 1000 characters" });
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const system = [
     "Ti si Vibe Wallet, kratak i praktičan finansijski asistent za korisnika iz Crne Gore.",
     "Odgovaraj na srpskom/crnogorskom jeziku, prijateljski i jasno.",
@@ -22,7 +38,7 @@ export default async function handler(req, res) {
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: `Pitanje korisnika: ${question}\n\nPodaci iz Walleta (JSON): ${context}` }] }], generationConfig: { temperature: 0.35, maxOutputTokens: 220 } })
     });
     const result = await response.json();

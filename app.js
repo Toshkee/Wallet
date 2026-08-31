@@ -32,6 +32,8 @@ const categoryMeta = {
   Plata: { icon: "+", color: "#63d39d" },
   Ostalo: { icon: "·", color: "#aaaaaa" },
 };
+const VALID_TRANSACTION_TYPES = new Set(["income", "expense"]);
+const VALID_CATEGORIES = new Set(Object.keys(categoryMeta));
 
 function clearLegacyDemoData() {
   if (localStorage.getItem(CLEAN_START_KEY)) return;
@@ -119,7 +121,7 @@ function localDate(date = new Date()) {
 function loadTransactions() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (Array.isArray(saved) && saved.length) return saved;
+    if (Array.isArray(saved)) return saved.map(normalizeTransaction).filter(Boolean);
   } catch (error) {
     console.warn("Sačuvani podaci nijesu dostupni.", error);
   }
@@ -133,7 +135,7 @@ function saveTransactions() {
 function loadBudgets() {
   try {
     const saved = JSON.parse(localStorage.getItem(BUDGET_KEY));
-    if (saved && typeof saved === "object" && !Array.isArray(saved)) return { ...DEFAULT_BUDGETS, ...saved };
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) return normalizeBudgets(saved);
   } catch (error) {
     console.warn("Sačuvani limiti nijesu dostupni.", error);
   }
@@ -148,12 +150,49 @@ function defaultGoal() {
   return { name: "", target: 0, saved: 0, deadline: "" };
 }
 
+function isValidDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return false;
+  const date = new Date(`${value}T12:00:00`);
+  return !Number.isNaN(date.getTime()) && localDate(date) === value;
+}
+
+function normalizeTransaction(item) {
+  const amount = Number(item?.amount);
+  if (!item || typeof item.id !== "string" || !item.id || !VALID_TRANSACTION_TYPES.has(item.type) || !Number.isFinite(amount) || amount <= 0 || !isValidDate(item.date)) return null;
+  return {
+    id: item.id.slice(0, 120),
+    type: item.type,
+    amount: Math.round(amount * 100) / 100,
+    category: VALID_CATEGORIES.has(item.category) ? item.category : "Ostalo",
+    date: item.date,
+    note: typeof item.note === "string" ? item.note.trim().slice(0, 160) : "",
+  };
+}
+
+function normalizeBudgets(input) {
+  return Object.keys(DEFAULT_BUDGETS).reduce((result, category) => {
+    const value = Number(input?.[category]);
+    result[category] = Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : DEFAULT_BUDGETS[category];
+    return result;
+  }, {});
+}
+
+function normalizeGoal(input) {
+  const target = Number(input?.target);
+  const saved = Number(input?.saved || 0);
+  if (!input || typeof input.name !== "string" || !input.name.trim() || !Number.isFinite(target) || target <= 0 || !Number.isFinite(saved) || saved < 0 || !isValidDate(input.deadline)) return defaultGoal();
+  return {
+    name: input.name.trim().slice(0, 80),
+    target: Math.round(target * 100) / 100,
+    saved: Math.round(saved * 100) / 100,
+    deadline: input.deadline,
+  };
+}
+
 function loadGoal() {
   try {
     const saved = JSON.parse(localStorage.getItem(GOAL_KEY));
-    if (saved && typeof saved.name === "string" && Number(saved.target) > 0 && typeof saved.deadline === "string") {
-      return { ...saved, target: Number(saved.target), saved: Number(saved.saved || 0) };
-    }
+    return normalizeGoal(saved);
   } catch (error) {
     console.warn("Sačuvani cilj nije dostupan.", error);
   }
@@ -411,12 +450,17 @@ function handleGoalSubmit(event) {
     showToast("Provjeri iznose cilja i dosadašnje štednje.");
     return;
   }
-  state.goal = {
+  const nextGoal = normalizeGoal({
     name: String(data.get("name")).trim(),
     target,
     saved,
     deadline: String(data.get("deadline")),
-  };
+  });
+  if (!nextGoal.target) {
+    showToast("Provjeri naziv i rok cilja.");
+    return;
+  }
+  state.goal = nextGoal;
   saveGoal();
   elements.goalSheet.close();
   renderDashboard();
@@ -518,19 +562,17 @@ async function importBackup(event) {
   const [file] = event.target.files;
   if (!file) return;
   try {
+    if (file.size > 2_000_000) throw new Error("Backup is too large");
     const backup = JSON.parse(await file.text());
-    const validTransactions = Array.isArray(backup.transactions) && backup.transactions.every((item) =>
-      item && typeof item.id === "string" && ["income", "expense"].includes(item.type) && Number.isFinite(Number(item.amount)) && typeof item.date === "string"
-    );
+    const validTransactions = Array.isArray(backup.transactions);
     const validBudgets = backup.budgets && typeof backup.budgets === "object" && !Array.isArray(backup.budgets);
-    const validGoal = !backup.goal || (typeof backup.goal.name === "string" && Number(backup.goal.target) > 0 && typeof backup.goal.deadline === "string");
-    if (!validTransactions || !validBudgets || !validGoal) throw new Error("Neispravan format");
+    const importedTransactions = validTransactions ? backup.transactions.map(normalizeTransaction).filter(Boolean) : [];
+    const importedGoal = backup.goal ? normalizeGoal(backup.goal) : defaultGoal();
+    if (backup.version !== 1 || !validTransactions || importedTransactions.length !== backup.transactions.length || !validBudgets || (backup.goal && !importedGoal.target)) throw new Error("Neispravan format");
     if (!window.confirm(`Uvesti ${backup.transactions.length} transakcija? Trenutni lokalni podaci biće zamijenjeni.`)) return;
-    state.transactions = backup.transactions.map((item) => ({ ...item, amount: Number(item.amount) }));
-    state.budgets = { ...DEFAULT_BUDGETS, ...backup.budgets };
-    state.goal = backup.goal
-      ? { ...backup.goal, target: Number(backup.goal.target), saved: Number(backup.goal.saved || 0) }
-      : defaultGoal();
+    state.transactions = importedTransactions;
+    state.budgets = normalizeBudgets(backup.budgets);
+    state.goal = importedGoal;
     saveTransactions();
     saveBudgets();
     saveGoal();
@@ -575,14 +617,18 @@ function handleTransactionSubmit(event) {
     elements.amountInput.focus();
     return;
   }
-  const nextTransaction = {
+  const nextTransaction = normalizeTransaction({
     id: state.editingId || crypto.randomUUID(),
     type: formData.get("type"),
     amount,
     category: formData.get("category"),
     date: formData.get("date"),
     note: String(formData.get("note") || "").trim(),
-  };
+  });
+  if (!nextTransaction) {
+    showToast("Provjeri datum i podatke unosa.");
+    return;
+  }
   if (state.editingId) {
     state.transactions = state.transactions.map((item) => item.id === state.editingId ? nextTransaction : item);
   } else {
@@ -641,14 +687,15 @@ function addTransactionFromChat(text) {
   const parsed = parseVoiceInput(text);
   const amount = Number(String(parsed.amount).replace(",", "."));
   if (!Number.isFinite(amount) || amount <= 0) return { transaction: null, needsAmount: true };
-  const transaction = {
+  const transaction = normalizeTransaction({
     id: crypto.randomUUID(),
     type: parsed.type,
     amount,
     category: parsed.category,
     date: transactionDateFromText(text),
     note: parsed.category === "Prevoz" && text.toLocaleLowerCase("sr").includes("gorivo") ? "Gorivo" : parsed.note,
-  };
+  });
+  if (!transaction) return { transaction: null, needsAmount: true };
   state.transactions.push(transaction);
   saveTransactions();
   renderDashboard();
@@ -825,7 +872,7 @@ async function answerAiQuestion(questionOverride = "") {
         summary: { income: summary.income, expense: summary.expense, balance: summary.income - summary.expense },
         budgets: state.budgets,
         goal: state.goal,
-        transactions: monthTransactions.map((item) => ({ date: item.date, type: item.type, amount: item.amount, category: item.category, note: item.note }))
+        transactions: monthTransactions.slice(-100).map((item) => ({ date: item.date, type: item.type, amount: item.amount, category: item.category }))
       })
     });
     if (response.ok) {
@@ -853,8 +900,10 @@ function legacyStartAiVoiceInput() {
   recognition.interimResults = false;
   elements.aiVoiceButton.classList.add("listening");
   recognition.addEventListener("result", (event) => {
-    elements.aiQuestion.value = event.results[0][0].transcript;
-    answerAiQuestion();
+    const transcript = event.results[0][0].transcript;
+    elements.aiQuestion.value = transcript;
+    elements.aiQuestion.focus();
+    elements.aiQuestion.setSelectionRange(transcript.length, transcript.length);
   });
   recognition.addEventListener("error", () => showToast("Nijesam jasno čuo. Pokušaj ponovo."));
   recognition.addEventListener("end", () => elements.aiVoiceButton.classList.remove("listening"));
@@ -993,12 +1042,19 @@ function navigateToPage(pageName, updateHash = true) {
     page.hidden = !active;
     page.classList.toggle("active", active);
   });
-  document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === nextPage));
+  document.querySelectorAll("[data-nav]").forEach((button) => {
+    const active = button.dataset.nav === nextPage;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
   if (nextPage === "entries") renderTransactionManager();
   if (nextPage === "plan") buildAiPlan();
   window.scrollTo({ top: 0, behavior: updateHash ? "smooth" : "auto" });
-  if (updateHash) history.replaceState(null, "", `#${nextPage}`);
+  if (updateHash && location.hash !== `#${nextPage}`) history.pushState(null, "", `#${nextPage}`);
 }
+
+window.addEventListener("hashchange", () => navigateToPage(location.hash.slice(1) || "ai", false));
 
 document.querySelectorAll("[data-period]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -1090,20 +1146,20 @@ function enableSwipeToDismiss(sheet) {
     dragging = false;
   };
   card.addEventListener("pointerdown", (event) => {
-    if (event.pointerType === "mouse" || card.scrollTop > 0) return;
+    if (event.pointerType !== "mouse" || card.scrollTop > 0) return;
     startY = event.clientY;
     dragging = true;
     card.setPointerCapture?.(event.pointerId);
   });
   card.addEventListener("pointermove", (event) => {
-    if (!dragging || startY === null) return;
+    if (event.pointerType !== "mouse" || !dragging || startY === null) return;
     const distance = event.clientY - startY;
     if (distance <= 0) return;
     card.style.transition = "none";
     card.style.transform = `translateY(${Math.min(distance, 180)}px)`;
   });
   card.addEventListener("pointerup", (event) => {
-    if (!dragging || startY === null) return;
+    if (event.pointerType !== "mouse" || !dragging || startY === null) return;
     const distance = event.clientY - startY;
     if (distance > 90) {
       card.style.transition = "transform .18s ease";
@@ -1116,7 +1172,9 @@ function enableSwipeToDismiss(sheet) {
       resetCard();
     }
   });
-  card.addEventListener("pointercancel", resetCard);
+  card.addEventListener("pointercancel", (event) => {
+    if (event.pointerType === "mouse") resetCard();
+  });
   card.addEventListener("touchstart", (event) => {
     if (card.scrollTop > 0 || !event.touches[0]) return;
     startY = event.touches[0].clientY;
