@@ -618,7 +618,7 @@ function parseVoiceInput(transcript) {
   };
 }
 
-function startVoiceInput() {
+function legacyStartVoiceInput() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     showToast("Glasovni unos nije podržan u ovom browseru.");
@@ -699,6 +699,9 @@ async function answerAiQuestion(questionOverride = "") {
   } else {
     answer = `Za ovaj mjesec vidim ${formatMoney(summary.income)} prihoda i ${formatMoney(summary.expense)} troškova. Pitaj me koliko ti je ostalo, koliko možeš uštedjeti ili da li stižeš do cilja.`;
   }
+  if ((question.includes("koji si") || question.includes("ko si") || question.includes("agent")) && answer.startsWith("Za ovaj mjesec")) {
+    answer = "Ja sam Vibe Wallet, tvoj finansijski asistent. Pomažem ti da pratiš troškove, prihode, limite i ciljeve štednje.";
+  }
   const localAnswer = answer;
   try {
     const response = await fetch("/api/chat", {
@@ -725,7 +728,7 @@ async function answerAiQuestion(questionOverride = "") {
   window.setTimeout(() => appendChatMessage("assistant", answer || localAnswer), 220);
 }
 
-function startAiVoiceInput() {
+function legacyStartAiVoiceInput() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     showToast("Glasovni unos nije podržan u ovom browseru.");
@@ -742,6 +745,116 @@ function startAiVoiceInput() {
   recognition.addEventListener("error", () => showToast("Nijesam jasno čuo. Pokušaj ponovo."));
   recognition.addEventListener("end", () => elements.aiVoiceButton.classList.remove("listening"));
   recognition.start();
+}
+
+let activeVoiceSession = null;
+
+function voiceMimeType() {
+  if (!window.MediaRecorder) return "";
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]
+    .find((type) => MediaRecorder.isTypeSupported(type)) || "";
+}
+
+function audioToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result).split(",")[1] || ""));
+    reader.addEventListener("error", reject);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function transcribeVoice(blob, mimeType) {
+  const audio = await audioToBase64(blob);
+  const response = await fetch("/api/voice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audio, mimeType })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.transcript) throw new Error(result.error || "Voice transcription failed");
+  return result.transcript;
+}
+
+async function toggleVoiceCapture({ button, onTranscript, onStart, onStop }) {
+  if (activeVoiceSession) {
+    if (activeVoiceSession.button === button && activeVoiceSession.recorder.state === "recording") activeVoiceSession.recorder.stop();
+    else showToast("Prvo završi trenutno snimanje.");
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+      if (button === elements.voiceButton) legacyStartVoiceInput();
+      else legacyStartAiVoiceInput();
+      return;
+    }
+    showToast("Ovaj browser ne podržava snimanje glasa.");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const mimeType = voiceMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    const stopTimer = window.setTimeout(() => recorder.stop(), 25000);
+    activeVoiceSession = { recorder, button };
+    button.classList.add("listening");
+    button.setAttribute("aria-pressed", "true");
+    onStart?.();
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size) chunks.push(event.data);
+    });
+    recorder.addEventListener("stop", async () => {
+      window.clearTimeout(stopTimer);
+      stream.getTracks().forEach((track) => track.stop());
+      activeVoiceSession = null;
+      button.classList.remove("listening");
+      button.setAttribute("aria-pressed", "false");
+      onStop?.();
+      if (!chunks.length) return showToast("Nijesam čuo snimak. Pokušaj ponovo.");
+      button.disabled = true;
+      showToast("Prepisujem glas…");
+      try {
+        const actualMimeType = recorder.mimeType || mimeType || "audio/webm";
+        const transcript = await transcribeVoice(new Blob(chunks, { type: actualMimeType }), actualMimeType);
+        onTranscript(transcript);
+      } catch (error) {
+        showToast(error.message.includes("configured") ? "Gemini ključ nije aktivan na Vercelu." : "Nijesam uspio prepoznati glas. Pokušaj ponovo.");
+      } finally {
+        button.disabled = false;
+      }
+    }, { once: true });
+    recorder.start();
+    showToast("Snimam… dodirni mikrofon ponovo kada završiš.");
+  } catch (error) {
+    showToast(error.name === "NotAllowedError" ? "Dozvoli mikrofon za Wallet u postavkama telefona." : "Mikrofon trenutno nije dostupan.");
+  }
+}
+
+function startVoiceInput() {
+  toggleVoiceCapture({
+    button: elements.voiceButton,
+    onStart: () => { elements.voiceHint.textContent = "Snimam… dodirni ponovo kada završiš"; },
+    onStop: () => { elements.voiceHint.textContent = "„18 eura za gorivo danas“"; },
+    onTranscript: (transcript) => {
+      const result = parseVoiceInput(transcript);
+      elements.amountInput.value = result.amount;
+      elements.categoryInput.value = result.category;
+      elements.noteInput.value = result.note;
+      document.querySelector(`input[name="type"][value="${result.type}"]`).checked = true;
+      showToast("Glas je prepoznat — provjeri i potvrdi unos.");
+    }
+  });
+}
+
+function startAiVoiceInput() {
+  toggleVoiceCapture({
+    button: elements.aiVoiceButton,
+    onTranscript: (transcript) => {
+      elements.aiQuestion.value = transcript;
+      answerAiQuestion();
+    }
+  });
 }
 
 let toastTimer;
