@@ -119,6 +119,26 @@ main { padding-bottom: calc(104px + var(--safe-bottom)); }
   gap: 12px;
 }
 
+.period-pager {
+  display: inline-grid;
+  grid-template-columns: 30px minmax(110px, auto) 30px;
+  align-items: center;
+  gap: 4px;
+}
+.period-pager .eyebrow { text-align: center; }
+.period-pager button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: monospace;
+  cursor: pointer;
+}
+.period-pager button:disabled { color: #444; cursor: default; }
+
 .eyebrow {
   margin: 0;
   color: var(--muted);

@@ -32,7 +32,11 @@
       <main id="top">
         <section class="hero-section">
           <div class="eyebrow-row">
-            <p class="eyebrow" id="dateLabel">AVGUST 2026</p>
+            <div class="period-pager">
+              <button id="previousPeriod" type="button" aria-label="Prethodni period">←</button>
+              <p class="eyebrow" id="dateLabel">AVGUST 2026</p>
+              <button id="nextPeriod" type="button" aria-label="Sljedeći period">→</button>
+            </div>
             <button class="privacy-toggle" id="privacyToggle" type="button" aria-label="Sakrij iznose">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
             </button>

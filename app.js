@@ -24,6 +24,7 @@ const categoryMeta = {
 
 const state = {
   period: "month",
+  anchorDate: localDate(),
   private: false,
   transactions: loadTransactions(),
   installPrompt: null,
@@ -57,6 +58,8 @@ const elements = {
   monthlySaving: document.querySelector("#monthlySaving"),
   yearlySaving: document.querySelector("#yearlySaving"),
   installButton: document.querySelector("#installButton"),
+  previousPeriod: document.querySelector("#previousPeriod"),
+  nextPeriod: document.querySelector("#nextPeriod"),
   toast: document.querySelector("#toast"),
 };
 
@@ -111,12 +114,30 @@ function startOfWeek(date) {
   return copy;
 }
 
-function inCurrentPeriod(transaction, period = state.period) {
-  const now = new Date();
+function periodBounds(period = state.period, anchorDate = state.anchorDate) {
+  const anchor = new Date(`${anchorDate}T12:00:00`);
+  let start;
+  let end;
+  if (period === "day") {
+    start = new Date(anchor);
+    end = new Date(anchor);
+  } else if (period === "week") {
+    start = startOfWeek(anchor);
+    end = new Date(start);
+    end.setDate(start.getDate() + 6);
+  } else {
+    start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  }
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function inCurrentPeriod(transaction, period = state.period, anchorDate = state.anchorDate) {
+  const { start, end } = periodBounds(period, anchorDate);
   const date = new Date(`${transaction.date}T12:00:00`);
-  if (period === "day") return localDate(date) === localDate(now);
-  if (period === "week") return date >= startOfWeek(now) && date <= now;
-  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+  return date >= start && date <= end;
 }
 
 function totals(transactions) {
@@ -147,11 +168,37 @@ function escapeHtml(value) {
 }
 
 function periodCopy() {
-  const now = new Date();
-  const month = new Intl.DateTimeFormat("sr-Latn-ME", { month: "long", year: "numeric" }).format(now).toUpperCase();
-  if (state.period === "day") return { label: "DANAS", context: "današnjih prihoda" };
-  if (state.period === "week") return { label: "OVA NEĐELJA", context: "prihoda ove neđelje" };
-  return { label: month, context: "prihoda ovog mjeseca" };
+  const anchor = new Date(`${state.anchorDate}T12:00:00`);
+  const { start, end } = periodBounds();
+  const today = localDate();
+  const month = new Intl.DateTimeFormat("sr-Latn-ME", { month: "long", year: "numeric" }).format(anchor).toUpperCase();
+  if (state.period === "day") {
+    const label = state.anchorDate === today
+      ? "DANAS"
+      : new Intl.DateTimeFormat("sr-Latn-ME", { day: "numeric", month: "short", year: "numeric" }).format(anchor).toUpperCase();
+    return { label, context: "prihoda izabranog dana" };
+  }
+  if (state.period === "week") {
+    const label = `${new Intl.DateTimeFormat("sr-Latn-ME", { day: "numeric", month: "short" }).format(start)} — ${new Intl.DateTimeFormat("sr-Latn-ME", { day: "numeric", month: "short" }).format(end)}`.toUpperCase();
+    return { label, context: "prihoda izabrane neđelje" };
+  }
+  return { label: month, context: "prihoda izabranog mjeseca" };
+}
+
+function movePeriod(direction) {
+  const anchor = new Date(`${state.anchorDate}T12:00:00`);
+  if (state.period === "day") anchor.setDate(anchor.getDate() + direction);
+  if (state.period === "week") anchor.setDate(anchor.getDate() + (direction * 7));
+  if (state.period === "month") {
+    const desiredDay = anchor.getDate();
+    anchor.setDate(1);
+    anchor.setMonth(anchor.getMonth() + direction);
+    const lastDay = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0).getDate();
+    anchor.setDate(Math.min(desiredDay, lastDay));
+  }
+  if (anchor > new Date()) anchor.setTime(new Date().getTime());
+  state.anchorDate = localDate(anchor);
+  renderDashboard();
 }
 
 function renderDashboard() {
@@ -160,6 +207,9 @@ function renderDashboard() {
   const balance = summary.income - summary.expense;
   const copy = periodCopy();
   elements.dateLabel.textContent = copy.label;
+  const currentBounds = periodBounds(state.period, localDate());
+  const selectedBounds = periodBounds();
+  elements.nextPeriod.disabled = selectedBounds.end >= currentBounds.end;
   elements.balanceValue.textContent = formatMoney(balance);
   elements.balanceContext.textContent = `od ${formatMoney(summary.income)} ${copy.context}`;
   elements.incomeValue.textContent = signedMoney(summary.income, "income");
@@ -175,7 +225,7 @@ function renderDashboard() {
 }
 
 function renderWeekChart() {
-  const now = new Date();
+  const now = new Date(`${state.anchorDate}T12:00:00`);
   const labels = ["NED", "PON", "UTO", "SRI", "ČET", "PET", "SUB"];
   const days = [];
   for (let i = 6; i >= 0; i -= 1) {
@@ -264,7 +314,7 @@ function renderTransactions(transactions) {
 
 function monthlyRestaurantSpend() {
   return state.transactions
-    .filter((item) => item.type === "expense" && item.category === "Restorani" && inCurrentPeriod(item, "month"))
+    .filter((item) => item.type === "expense" && item.category === "Restorani" && inCurrentPeriod(item, "month", state.anchorDate))
     .reduce((sum, item) => sum + Number(item.amount), 0);
 }
 
@@ -286,7 +336,7 @@ function buildAiPlan(customAnswer = "") {
   const spend = monthlyRestaurantSpend();
   const saving = Math.max(0, spend - 120);
   const annual = saving * 12;
-  const summary = totals(state.transactions.filter((item) => inCurrentPeriod(item, "month")));
+  const summary = totals(state.transactions.filter((item) => inCurrentPeriod(item, "month", state.anchorDate)));
   elements.aiPlanMessage.textContent = customAnswer || (saving
     ? `Najlakša prilika je kategorija Restorani. Sa limita od 120 € zadržavaš isti stil života, a oslobađaš oko ${formatMoney(saving, true)} mjesečno i ${formatMoney(annual, true)} godišnje.`
     : `Trenutno si u okviru predloženog limita za restorane. Sljedeći plan mogu napraviti kada dodamo još tvojih stvarnih troškova.`);
@@ -386,7 +436,7 @@ function startVoiceInput() {
 function answerAiQuestion() {
   const question = elements.aiQuestion.value.trim().toLocaleLowerCase("sr");
   if (!question) return;
-  const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month"));
+  const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", state.anchorDate));
   const summary = totals(monthTransactions);
   const restaurants = monthlyRestaurantSpend();
   const saving = Math.max(0, restaurants - 120);
@@ -421,6 +471,7 @@ function applyPrivacy() {
 document.querySelectorAll("[data-period]").forEach((button) => {
   button.addEventListener("click", () => {
     state.period = button.dataset.period;
+    state.anchorDate = localDate();
     document.querySelectorAll("[data-period]").forEach((item) => {
       const active = item === button;
       item.classList.toggle("active", active);
@@ -429,6 +480,9 @@ document.querySelectorAll("[data-period]").forEach((button) => {
     renderDashboard();
   });
 });
+
+elements.previousPeriod.addEventListener("click", () => movePeriod(-1));
+elements.nextPeriod.addEventListener("click", () => movePeriod(1));
 
 document.querySelector("#privacyToggle").addEventListener("click", () => {
   state.private = !state.private;
