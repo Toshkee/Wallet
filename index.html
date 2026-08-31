@@ -94,7 +94,7 @@
               <p class="eyebrow">KATEGORIJE</p>
               <h2 id="categoriesTitle">Gdje odlazi novac</h2>
             </div>
-            <button class="text-button" type="button" data-action="all-transactions">SVE <span>→</span></button>
+            <button class="text-button" id="openBudgetButton" type="button">LIMITI <span>→</span></button>
           </div>
           <div class="category-list" id="categoryList"></div>
         </section>
@@ -106,7 +106,7 @@
               <span class="ai-status">ANALIZA GOTOVA</span>
             </div>
             <h2 id="aiTitle">Možeš uštedjeti više.</h2>
-            <p id="aiInsight">Ovog mjeseca si potrošio više na restorane. Ako potrošnju ograničiš na 120 €, možeš uštedjeti:</p>
+            <p id="aiInsight">Analiziram tvoje kategorije i mjesečne limite da pronađem najrealniju uštedu.</p>
             <div class="saving-grid">
               <div>
                 <span>MJESEČNO</span>
@@ -127,6 +127,7 @@
               <p class="eyebrow">AKTIVNOST</p>
               <h2 id="transactionsTitle">Posljednje transakcije</h2>
             </div>
+            <button class="text-button" id="openTransactionsButton" type="button">SVE <span>→</span></button>
           </div>
           <div class="transaction-list" id="transactionList"></div>
         </section>
@@ -225,6 +226,58 @@
           <input id="aiQuestion" placeholder="Pitaj nešto o troškovima…" />
           <button id="askAiButton" type="button" aria-label="Pošalji pitanje">→</button>
         </div>
+      </div>
+    </dialog>
+
+    <dialog class="sheet" id="budgetSheet">
+      <form method="dialog" class="sheet-card" id="budgetForm">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">MJESEČNI OKVIR</p>
+            <h2>Limiti potrošnje</h2>
+          </div>
+          <button class="close-button" value="cancel" type="submit" aria-label="Zatvori">×</button>
+        </div>
+        <p class="sheet-intro">Postavi realan maksimum za svaku kategoriju. AI koristi ove limite kada računa moguću uštedu.</p>
+        <div class="budget-fields" id="budgetFields"></div>
+        <button class="primary-button" type="submit" value="save">SAČUVAJ LIMITE <span>→</span></button>
+      </form>
+    </dialog>
+
+    <dialog class="sheet" id="transactionsSheet">
+      <div class="sheet-card list-sheet-card">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">ISTORIJA</p>
+            <h2>Svi unosi perioda</h2>
+          </div>
+          <button class="close-button" id="closeTransactionsButton" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <p class="sheet-intro" id="transactionManagerSummary"></p>
+        <div class="managed-transactions" id="managedTransactions"></div>
+        <button class="primary-button" id="addFromHistoryButton" type="button">DODAJ NOVI UNOS <span>+</span></button>
+      </div>
+    </dialog>
+
+    <dialog class="sheet" id="dataSheet">
+      <div class="sheet-card data-sheet-card">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">TVOJI PODACI</p>
+            <h2>Backup i privatnost</h2>
+          </div>
+          <button class="close-button" id="closeDataButton" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <p class="sheet-intro">Podaci ostaju na ovom uređaju. Sačuvaj backup fajl ako mijenjaš telefon ili browser.</p>
+        <div class="data-actions">
+          <button id="exportDataButton" type="button"><span class="data-action-icon">↓</span><span><strong>IZVEZI BACKUP</strong><small>Transakcije i limiti u jednom JSON fajlu</small></span><b>→</b></button>
+          <label for="importDataInput"><span class="data-action-icon">↑</span><span><strong>UVEZI BACKUP</strong><small>Vrati prethodno sačuvane podatke</small></span><b>→</b></label>
+          <input id="importDataInput" type="file" accept="application/json,.json" hidden />
+        </div>
+        <div class="privacy-note"><span>●</span><p><strong>PRIVATNO PO DIZAJNU</strong>Tvoji finansijski podaci se u ovoj verziji ne šalju ni na jedan server.</p></div>
       </div>
     </dialog>
 

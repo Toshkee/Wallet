@@ -281,7 +281,7 @@ main { padding-bottom: calc(104px + var(--safe-bottom)); }
 
 .text-button { border: 0; background: transparent; color: var(--red); font-family: monospace; font-size: 11px; font-weight: 900; letter-spacing: .1em; cursor: pointer; }
 .category-list { margin-top: 14px; border-top: 2px solid var(--line); }
-.category-item { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 12px; min-height: 70px; border-bottom: 1px solid var(--line); }
+.category-item { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 8px 12px; min-height: 78px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .category-icon, .transaction-icon { display: grid; place-items: center; background: var(--surface-2); color: var(--ink); font-size: 18px; }
 .category-icon { width: 42px; height: 42px; border: 1px solid var(--line); }
 .category-copy strong, .transaction-copy strong { display: block; font-size: 14px; }
@@ -289,6 +289,9 @@ main { padding-bottom: calc(104px + var(--safe-bottom)); }
 .category-amount { text-align: right; }
 .category-amount strong { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
 .category-amount span { display: block; margin-top: 5px; color: var(--muted); font-family: monospace; font-size: 10px; }
+.category-progress { grid-column: 2 / -1; height: 3px; margin-bottom: 1px; background: var(--surface-3); }
+.category-progress span { display: block; width: 0; height: 100%; background: var(--green); }
+.category-progress.over span { background: var(--red); }
 
 .ai-card { position: relative; overflow: hidden; padding: 20px; border: 2px solid var(--red); background: linear-gradient(135deg, rgba(243,52,47,.16), rgba(17,17,17,.96) 60%); box-shadow: 5px 5px 0 var(--red-deep); }
 .ai-card::before { position: absolute; right: -20px; top: 50px; color: rgba(243,52,47,.08); content: "✦"; font-size: 180px; line-height: .5; }
@@ -365,6 +368,40 @@ main { padding-bottom: calc(104px + var(--safe-bottom)); }
 .amount-input input { height: 68px; padding: 0; border: 0; background: transparent; font-family: Impact, "Arial Black", sans-serif; font-size: 40px; }
 .amount-input b { color: var(--muted); font-size: 28px; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.sheet-intro { margin: -4px 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.budget-fields { border-top: 1px solid var(--line); }
+.budget-field { display: grid; grid-template-columns: 42px 1fr 112px; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.budget-field .category-icon { width: 38px; height: 38px; }
+.budget-field label { font-size: 13px; font-weight: 800; }
+.budget-field label small { display: block; margin-top: 3px; color: var(--muted); font-weight: 400; }
+.budget-input { display: flex; align-items: center; border: 1px solid var(--line); background: var(--surface-2); }
+.budget-input input { min-width: 0; width: 100%; height: 40px; padding: 0 8px; border: 0; background: transparent; color: var(--ink); text-align: right; font-weight: 900; }
+.budget-input span { padding-right: 9px; color: var(--muted); font-weight: 800; }
+
+.list-sheet-card { min-height: 66dvh; }
+.managed-transactions { max-height: 48dvh; margin-bottom: 8px; overflow-y: auto; }
+.managed-item { display: grid; grid-template-columns: 38px 1fr auto 38px; align-items: center; gap: 9px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.managed-item .transaction-icon { width: 36px; height: 36px; }
+.managed-item-copy strong { display: block; font-size: 13px; }
+.managed-item-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.managed-item-amount { font-size: 12px; font-weight: 900; white-space: nowrap; }
+.managed-item-amount.income { color: var(--green); }
+.delete-button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.delete-button:hover { border-color: var(--red); color: var(--red); }
+.delete-button svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+.data-sheet-card { min-height: 50dvh; }
+.data-actions { border-top: 1px solid var(--line); }
+.data-actions button, .data-actions label { display: grid; grid-template-columns: 42px 1fr 24px; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.data-action-icon { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--line); background: var(--surface-2); color: var(--red); font-size: 20px; }
+.data-actions strong { display: block; font-family: monospace; font-size: 10px; letter-spacing: .08em; }
+.data-actions small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+.data-actions b { color: var(--red); font-size: 18px; }
+.privacy-note { display: grid; grid-template-columns: 16px 1fr; gap: 8px; margin-top: 20px; padding: 13px; border: 1px solid rgba(99,211,157,.22); background: rgba(99,211,157,.06); }
+.privacy-note > span { color: var(--green); font-size: 10px; }
+.privacy-note p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.privacy-note strong { display: block; margin-bottom: 3px; color: var(--green); font-family: monospace; font-size: 9px; letter-spacing: .09em; }
 
 .ai-sheet-card { min-height: 55dvh; }
 .ai-message { padding: 15px; border-left: 3px solid var(--red); background: var(--surface-2); color: #d1cfca; font-size: 14px; line-height: 1.55; }

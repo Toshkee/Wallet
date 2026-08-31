@@ -1,4 +1,13 @@
 const STORAGE_KEY = "vibe-wallet-transactions-v1";
+const BUDGET_KEY = "vibe-wallet-budgets-v1";
+const DEFAULT_BUDGETS = {
+  Hrana: 250,
+  Restorani: 120,
+  "Računi": 500,
+  Prevoz: 150,
+  Kupovina: 100,
+  Zabava: 80,
+};
 const moneyFormatter = new Intl.NumberFormat("sr-ME", {
   style: "currency",
   currency: "EUR",
@@ -27,6 +36,7 @@ const state = {
   anchorDate: localDate(),
   private: false,
   transactions: loadTransactions(),
+  budgets: loadBudgets(),
   installPrompt: null,
 };
 
@@ -58,6 +68,14 @@ const elements = {
   monthlySaving: document.querySelector("#monthlySaving"),
   yearlySaving: document.querySelector("#yearlySaving"),
   installButton: document.querySelector("#installButton"),
+  budgetSheet: document.querySelector("#budgetSheet"),
+  budgetForm: document.querySelector("#budgetForm"),
+  budgetFields: document.querySelector("#budgetFields"),
+  transactionsSheet: document.querySelector("#transactionsSheet"),
+  managedTransactions: document.querySelector("#managedTransactions"),
+  transactionManagerSummary: document.querySelector("#transactionManagerSummary"),
+  dataSheet: document.querySelector("#dataSheet"),
+  importDataInput: document.querySelector("#importDataInput"),
   previousPeriod: document.querySelector("#previousPeriod"),
   nextPeriod: document.querySelector("#nextPeriod"),
   toast: document.querySelector("#toast"),
@@ -104,6 +122,20 @@ function loadTransactions() {
 
 function saveTransactions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.transactions));
+}
+
+function loadBudgets() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BUDGET_KEY));
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) return { ...DEFAULT_BUDGETS, ...saved };
+  } catch (error) {
+    console.warn("Sačuvani limiti nijesu dostupni.", error);
+  }
+  return { ...DEFAULT_BUDGETS };
+}
+
+function saveBudgets() {
+  localStorage.setItem(BUDGET_KEY, JSON.stringify(state.budgets));
 }
 
 function startOfWeek(date) {
@@ -202,7 +234,7 @@ function movePeriod(direction) {
 }
 
 function renderDashboard() {
-  const filtered = state.transactions.filter(inCurrentPeriod);
+  const filtered = state.transactions.filter((item) => inCurrentPeriod(item));
   const summary = totals(filtered);
   const balance = summary.income - summary.expense;
   const copy = periodCopy();
@@ -283,11 +315,15 @@ function renderCategories(transactions, totalExpense) {
   elements.categoryList.innerHTML = sorted.map(([category, amount]) => {
     const meta = categoryMeta[category] || categoryMeta.Ostalo;
     const percent = totalExpense ? Math.round((amount / totalExpense) * 100) : 0;
+    const limit = Number(state.budgets[category] || 0);
+    const budgetPercent = limit ? Math.round((amount / limit) * 100) : 0;
+    const showsBudget = state.period === "month" && limit > 0;
     return `
       <article class="category-item">
         <div class="category-icon" style="color:${meta.color}">${meta.icon}</div>
-        <div class="category-copy"><strong>${escapeHtml(category)}</strong><span>${percent}% svih troškova</span></div>
-        <div class="category-amount"><strong class="private-value">${formatMoney(amount)}</strong><span>${percent}%</span></div>
+        <div class="category-copy"><strong>${escapeHtml(category)}</strong><span>${showsBudget ? `${formatMoney(amount, true)} od ${formatMoney(limit, true)}` : `${percent}% svih troškova`}</span></div>
+        <div class="category-amount"><strong class="private-value">${formatMoney(amount)}</strong><span>${showsBudget ? `${budgetPercent}% LIMITA` : `${percent}%`}</span></div>
+        ${showsBudget ? `<div class="category-progress ${budgetPercent > 100 ? "over" : ""}"><span style="width:${Math.min(100, budgetPercent)}%"></span></div>` : ""}
       </article>
     `;
   }).join("");
@@ -320,7 +356,7 @@ function monthlyRestaurantSpend() {
 
 function renderAiInsight() {
   const restaurantSpend = monthlyRestaurantSpend();
-  const restaurantLimit = 120;
+  const restaurantLimit = Number(state.budgets.Restorani || 120);
   const saving = Math.max(0, restaurantSpend - restaurantLimit);
   const yearly = saving * 12;
   if (saving > 0) {
@@ -334,17 +370,138 @@ function renderAiInsight() {
 
 function buildAiPlan(customAnswer = "") {
   const spend = monthlyRestaurantSpend();
-  const saving = Math.max(0, spend - 120);
+  const restaurantLimit = Number(state.budgets.Restorani || 120);
+  const saving = Math.max(0, spend - restaurantLimit);
   const annual = saving * 12;
   const summary = totals(state.transactions.filter((item) => inCurrentPeriod(item, "month", state.anchorDate)));
   elements.aiPlanMessage.textContent = customAnswer || (saving
-    ? `Najlakša prilika je kategorija Restorani. Sa limita od 120 € zadržavaš isti stil života, a oslobađaš oko ${formatMoney(saving, true)} mjesečno i ${formatMoney(annual, true)} godišnje.`
+    ? `Najlakša prilika je kategorija Restorani. Sa limita od ${formatMoney(restaurantLimit, true)} zadržavaš isti stil života, a oslobađaš oko ${formatMoney(saving, true)} mjesečno i ${formatMoney(annual, true)} godišnje.`
     : `Trenutno si u okviru predloženog limita za restorane. Sljedeći plan mogu napraviti kada dodamo još tvojih stvarnih troškova.`);
   elements.aiSteps.innerHTML = `
-    <div class="ai-step"><span class="ai-step-index">01</span><div><strong>Limit za restorane</strong><small>Prati se automatski svakog mjeseca</small></div><span class="ai-step-amount">120 €</span></div>
-    <div class="ai-step"><span class="ai-step-index">02</span><div><strong>Nedjeljni okvir</strong><small>Podijeljeno na četiri realne cjeline</small></div><span class="ai-step-amount">30 €</span></div>
+    <div class="ai-step"><span class="ai-step-index">01</span><div><strong>Limit za restorane</strong><small>Prati se automatski svakog mjeseca</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit, true)}</span></div>
+    <div class="ai-step"><span class="ai-step-index">02</span><div><strong>Nedjeljni okvir</strong><small>Podijeljeno na četiri realne cjeline</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit / 4, true)}</span></div>
     <div class="ai-step"><span class="ai-step-index">03</span><div><strong>Trenutno preostalo</strong><small>Prihodi minus evidentirani troškovi</small></div><span class="ai-step-amount">${formatMoney(summary.income - summary.expense, true)}</span></div>
   `;
+}
+
+function openBudgetSheet() {
+  elements.budgetFields.innerHTML = Object.keys(DEFAULT_BUDGETS).map((category) => {
+    const meta = categoryMeta[category] || categoryMeta.Ostalo;
+    return `
+      <div class="budget-field">
+        <span class="category-icon" style="color:${meta.color}">${meta.icon}</span>
+        <label for="budget-${escapeHtml(category)}">${escapeHtml(category)}<small>Mjesečni maksimum</small></label>
+        <span class="budget-input"><input id="budget-${escapeHtml(category)}" name="${escapeHtml(category)}" inputmode="decimal" value="${Number(state.budgets[category] || 0)}" aria-label="Limit za ${escapeHtml(category)}" /><span>€</span></span>
+      </div>
+    `;
+  }).join("");
+  elements.budgetSheet.showModal();
+}
+
+function handleBudgetSubmit(event) {
+  event.preventDefault();
+  if (event.submitter?.value === "cancel") {
+    elements.budgetSheet.close();
+    return;
+  }
+  const data = new FormData(elements.budgetForm);
+  Object.keys(DEFAULT_BUDGETS).forEach((category) => {
+    const value = Number(String(data.get(category) || "0").replace(",", "."));
+    state.budgets[category] = Number.isFinite(value) && value >= 0 ? value : 0;
+  });
+  saveBudgets();
+  elements.budgetSheet.close();
+  renderDashboard();
+  showToast("Mjesečni limiti su sačuvani.");
+}
+
+function renderTransactionManager() {
+  const filtered = state.transactions
+    .filter((item) => inCurrentPeriod(item))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const summary = totals(filtered);
+  elements.transactionManagerSummary.textContent = `${periodCopy().label}: ${filtered.length} unosa · ${formatMoney(summary.income)} prihoda · ${formatMoney(summary.expense)} troškova`;
+  if (!filtered.length) {
+    elements.managedTransactions.innerHTML = `<div class="empty-state">Nema unosa u ovom periodu.</div>`;
+    return;
+  }
+  elements.managedTransactions.innerHTML = filtered.map((item) => {
+    const meta = categoryMeta[item.category] || categoryMeta.Ostalo;
+    const date = new Intl.DateTimeFormat("sr-Latn-ME", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${item.date}T12:00:00`));
+    return `
+      <article class="managed-item">
+        <span class="transaction-icon" style="color:${meta.color}">${meta.icon}</span>
+        <span class="managed-item-copy"><strong>${escapeHtml(item.note || item.category)}</strong><span>${escapeHtml(item.category)} · ${date}</span></span>
+        <span class="managed-item-amount private-value ${item.type}">${signedMoney(item.amount, item.type)}</span>
+        <button class="delete-button" type="button" data-delete-id="${escapeHtml(item.id)}" aria-label="Obriši ${escapeHtml(item.note || item.category)}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg>
+        </button>
+      </article>
+    `;
+  }).join("");
+  applyPrivacy();
+}
+
+function openTransactionsSheet() {
+  renderTransactionManager();
+  elements.transactionsSheet.showModal();
+}
+
+function deleteTransaction(id) {
+  const transaction = state.transactions.find((item) => item.id === id);
+  if (!transaction) return;
+  const description = transaction.note || transaction.category;
+  if (!window.confirm(`Obrisati unos „${description}“ od ${formatMoney(transaction.amount)}?`)) return;
+  state.transactions = state.transactions.filter((item) => item.id !== id);
+  saveTransactions();
+  renderDashboard();
+  renderTransactionManager();
+  showToast("Unos je obrisan.");
+}
+
+function downloadBackup() {
+  const backup = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    transactions: state.transactions,
+    budgets: state.budgets,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `vibe-wallet-backup-${localDate()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast("Backup je preuzet.");
+}
+
+async function importBackup(event) {
+  const [file] = event.target.files;
+  if (!file) return;
+  try {
+    const backup = JSON.parse(await file.text());
+    const validTransactions = Array.isArray(backup.transactions) && backup.transactions.every((item) =>
+      item && typeof item.id === "string" && ["income", "expense"].includes(item.type) && Number.isFinite(Number(item.amount)) && typeof item.date === "string"
+    );
+    const validBudgets = backup.budgets && typeof backup.budgets === "object" && !Array.isArray(backup.budgets);
+    if (!validTransactions || !validBudgets) throw new Error("Neispravan format");
+    if (!window.confirm(`Uvesti ${backup.transactions.length} transakcija? Trenutni lokalni podaci biće zamijenjeni.`)) return;
+    state.transactions = backup.transactions.map((item) => ({ ...item, amount: Number(item.amount) }));
+    state.budgets = { ...DEFAULT_BUDGETS, ...backup.budgets };
+    saveTransactions();
+    saveBudgets();
+    state.anchorDate = localDate();
+    renderDashboard();
+    elements.dataSheet.close();
+    showToast("Backup je uspješno uvezen.");
+  } catch (error) {
+    showToast("Fajl nije validan Vibe Wallet backup.");
+  } finally {
+    event.target.value = "";
+  }
 }
 
 function openTransactionSheet() {
@@ -439,10 +596,11 @@ function answerAiQuestion() {
   const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", state.anchorDate));
   const summary = totals(monthTransactions);
   const restaurants = monthlyRestaurantSpend();
-  const saving = Math.max(0, restaurants - 120);
+  const restaurantLimit = Number(state.budgets.Restorani || 120);
+  const saving = Math.max(0, restaurants - restaurantLimit);
   let answer;
   if (question.includes("restoran") || question.includes("ručak") || question.includes("rucak")) {
-    answer = `Na restorane si ovog mjeseca potrošio ${formatMoney(restaurants)}. Predloženi limit je 120 €, pa je moguća mjesečna ušteda ${formatMoney(saving)}.`;
+    answer = `Na restorane si ovog mjeseca potrošio ${formatMoney(restaurants)}. Tvoj limit je ${formatMoney(restaurantLimit)}, pa je moguća mjesečna ušteda ${formatMoney(saving)}.`;
   } else if (question.includes("ušted") || question.includes("usted")) {
     answer = `Prema trenutnim unosima, samo smanjenjem restorana možeš sačuvati ${formatMoney(saving)} mjesečno, odnosno ${formatMoney(saving * 12)} godišnje.`;
   } else if (question.includes("ostalo") || question.includes("preostalo") || question.includes("imam")) {
@@ -503,20 +661,34 @@ elements.aiQuestion.addEventListener("keydown", (event) => {
   if (event.key === "Enter") answerAiQuestion();
 });
 
-document.querySelector("[data-action='all-transactions']").addEventListener("click", () => {
-  document.querySelector(".transactions-section").scrollIntoView({ behavior: "smooth" });
+document.querySelector("#openBudgetButton").addEventListener("click", openBudgetSheet);
+elements.budgetForm.addEventListener("submit", handleBudgetSubmit);
+
+document.querySelector("#openTransactionsButton").addEventListener("click", openTransactionsSheet);
+document.querySelector("#closeTransactionsButton").addEventListener("click", () => elements.transactionsSheet.close());
+document.querySelector("#addFromHistoryButton").addEventListener("click", () => {
+  elements.transactionsSheet.close();
+  openTransactionSheet();
 });
+elements.managedTransactions.addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-delete-id]");
+  if (deleteButton) deleteTransaction(deleteButton.dataset.deleteId);
+});
+
+document.querySelector("#closeDataButton").addEventListener("click", () => elements.dataSheet.close());
+document.querySelector("#exportDataButton").addEventListener("click", downloadBackup);
+elements.importDataInput.addEventListener("change", importBackup);
 
 document.querySelectorAll("[data-nav]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-nav]").forEach((item) => item.classList.toggle("active", item === button));
     if (button.dataset.nav === "home") window.scrollTo({ top: 0, behavior: "smooth" });
-    if (button.dataset.nav === "transactions") document.querySelector(".transactions-section").scrollIntoView({ behavior: "smooth" });
+    if (button.dataset.nav === "transactions") openTransactionsSheet();
     if (button.dataset.nav === "plan") {
       buildAiPlan();
       elements.aiSheet.showModal();
     }
-    if (button.dataset.nav === "more") showToast("Podešavanja i izvoz podataka dolaze u sljedećoj verziji.");
+    if (button.dataset.nav === "more") elements.dataSheet.showModal();
   });
 });
 
