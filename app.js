@@ -663,7 +663,7 @@ function appendChatMessage(role, message) {
   item.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-function answerAiQuestion(questionOverride = "") {
+async function answerAiQuestion(questionOverride = "") {
   const originalQuestion = String(questionOverride || elements.aiQuestion.value).trim();
   const question = originalQuestion.toLocaleLowerCase("sr");
   if (!question) return;
@@ -699,9 +699,30 @@ function answerAiQuestion(questionOverride = "") {
   } else {
     answer = `Za ovaj mjesec vidim ${formatMoney(summary.income)} prihoda i ${formatMoney(summary.expense)} troškova. Pitaj me koliko ti je ostalo, koliko možeš uštedjeti ili da li stižeš do cilja.`;
   }
+  const localAnswer = answer;
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: originalQuestion,
+        month: localDate().toISOString().slice(0, 7),
+        summary: { income: summary.income, expense: summary.expense, balance: summary.income - summary.expense },
+        budgets: state.budgets,
+        goal: state.goal,
+        transactions: monthTransactions.map((item) => ({ date: item.date, type: item.type, amount: item.amount, category: item.category, note: item.note }))
+      })
+    });
+    if (response.ok) {
+      const result = await response.json();
+      if (result.answer) answer = result.answer;
+    }
+  } catch (error) {
+    // Keep the local answer when the API is unavailable or not configured.
+  }
   buildAiPlan(answer);
   elements.aiQuestion.value = "";
-  window.setTimeout(() => appendChatMessage("assistant", answer), 220);
+  window.setTimeout(() => appendChatMessage("assistant", answer || localAnswer), 220);
 }
 
 function startAiVoiceInput() {
