@@ -381,15 +381,16 @@ main { padding-bottom: calc(104px + var(--safe-bottom)); }
 
 .list-sheet-card { min-height: 66dvh; }
 .managed-transactions { max-height: 48dvh; margin-bottom: 8px; overflow-y: auto; }
-.managed-item { display: grid; grid-template-columns: 38px 1fr auto 38px; align-items: center; gap: 9px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.managed-item { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 34px 34px; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .managed-item .transaction-icon { width: 36px; height: 36px; }
 .managed-item-copy strong { display: block; font-size: 13px; }
 .managed-item-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
 .managed-item-amount { font-size: 12px; font-weight: 900; white-space: nowrap; }
 .managed-item-amount.income { color: var(--green); }
-.delete-button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.delete-button, .edit-button { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
 .delete-button:hover { border-color: var(--red); color: var(--red); }
-.delete-button svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.edit-button:hover { border-color: var(--ink); color: var(--ink); }
+.delete-button svg, .edit-button svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 
 .data-sheet-card { min-height: 50dvh; }
 .data-actions { border-top: 1px solid var(--line); }

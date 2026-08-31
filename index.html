@@ -161,8 +161,8 @@
         <div class="sheet-grabber"></div>
         <div class="sheet-head">
           <div>
-            <p class="eyebrow">NOVI UNOS</p>
-            <h2>Dodaj transakciju</h2>
+            <p class="eyebrow" id="transactionFormEyebrow">NOVI UNOS</p>
+            <h2 id="transactionFormTitle">Dodaj transakciju</h2>
           </div>
           <button class="close-button" value="cancel" type="submit" aria-label="Zatvori">×</button>
         </div>
@@ -206,7 +206,7 @@
           <span>NAPOMENA</span>
           <input id="noteInput" name="note" placeholder="Npr. ručak sa ekipom" autocomplete="off" />
         </label>
-        <button class="primary-button" type="submit" value="save">SAČUVAJ UNOS <span>→</span></button>
+        <button class="primary-button" type="submit" value="save"><span id="transactionSubmitLabel">SAČUVAJ UNOS</span><span>→</span></button>
       </form>
     </dialog>
 

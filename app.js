@@ -35,6 +35,7 @@ const state = {
   period: "month",
   anchorDate: localDate(),
   private: false,
+  editingId: null,
   transactions: loadTransactions(),
   budgets: loadBudgets(),
   installPrompt: null,
@@ -58,6 +59,9 @@ const elements = {
   categoryInput: document.querySelector("#categoryInput"),
   dateInput: document.querySelector("#dateInput"),
   noteInput: document.querySelector("#noteInput"),
+  transactionFormEyebrow: document.querySelector("#transactionFormEyebrow"),
+  transactionFormTitle: document.querySelector("#transactionFormTitle"),
+  transactionSubmitLabel: document.querySelector("#transactionSubmitLabel"),
   voiceButton: document.querySelector("#voiceButton"),
   voiceHint: document.querySelector("#voiceHint"),
   aiSheet: document.querySelector("#aiSheet"),
@@ -433,6 +437,9 @@ function renderTransactionManager() {
         <span class="transaction-icon" style="color:${meta.color}">${meta.icon}</span>
         <span class="managed-item-copy"><strong>${escapeHtml(item.note || item.category)}</strong><span>${escapeHtml(item.category)} · ${date}</span></span>
         <span class="managed-item-amount private-value ${item.type}">${signedMoney(item.amount, item.type)}</span>
+        <button class="edit-button" type="button" data-edit-id="${escapeHtml(item.id)}" aria-label="Uredi ${escapeHtml(item.note || item.category)}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10.9-10.9-3.2-3.2L5 15.8 4 20Zm10.3-13.5 3.2 3.2M14.8 6l2-2a1.4 1.4 0 0 1 2 0l1.2 1.2a1.4 1.4 0 0 1 0 2l-2 2" /></svg>
+        </button>
         <button class="delete-button" type="button" data-delete-id="${escapeHtml(item.id)}" aria-label="Obriši ${escapeHtml(item.note || item.category)}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5" /></svg>
         </button>
@@ -504,8 +511,19 @@ async function importBackup(event) {
   }
 }
 
-function openTransactionSheet() {
-  elements.dateInput.value = localDate();
+function openTransactionSheet(transaction = null) {
+  elements.transactionForm.reset();
+  state.editingId = transaction?.id || null;
+  elements.transactionFormEyebrow.textContent = transaction ? "UREĐIVANJE" : "NOVI UNOS";
+  elements.transactionFormTitle.textContent = transaction ? "Uredi transakciju" : "Dodaj transakciju";
+  elements.transactionSubmitLabel.textContent = transaction ? "SAČUVAJ IZMJENE" : "SAČUVAJ UNOS";
+  elements.dateInput.value = transaction?.date || localDate();
+  if (transaction) {
+    elements.amountInput.value = String(transaction.amount).replace(".", ",");
+    elements.categoryInput.value = transaction.category;
+    elements.noteInput.value = transaction.note || "";
+    document.querySelector(`input[name="type"][value="${transaction.type}"]`).checked = true;
+  }
   elements.transactionSheet.showModal();
   window.setTimeout(() => elements.amountInput.focus(), 180);
 }
@@ -523,19 +541,26 @@ function handleTransactionSubmit(event) {
     elements.amountInput.focus();
     return;
   }
-  state.transactions.push({
-    id: crypto.randomUUID(),
+  const nextTransaction = {
+    id: state.editingId || crypto.randomUUID(),
     type: formData.get("type"),
     amount,
     category: formData.get("category"),
     date: formData.get("date"),
     note: String(formData.get("note") || "").trim(),
-  });
+  };
+  if (state.editingId) {
+    state.transactions = state.transactions.map((item) => item.id === state.editingId ? nextTransaction : item);
+  } else {
+    state.transactions.push(nextTransaction);
+  }
+  const wasEditing = Boolean(state.editingId);
+  state.editingId = null;
   saveTransactions();
   elements.transactionForm.reset();
   elements.transactionSheet.close();
   renderDashboard();
-  showToast("Transakcija je sačuvana.");
+  showToast(wasEditing ? "Izmjene su sačuvane." : "Transakcija je sačuvana.");
 }
 
 function parseVoiceInput(transcript) {
@@ -647,7 +672,7 @@ document.querySelector("#privacyToggle").addEventListener("click", () => {
   applyPrivacy();
 });
 
-document.querySelector("#addButton").addEventListener("click", openTransactionSheet);
+document.querySelector("#addButton").addEventListener("click", () => openTransactionSheet());
 elements.transactionForm.addEventListener("submit", handleTransactionSubmit);
 elements.voiceButton.addEventListener("click", startVoiceInput);
 
@@ -671,6 +696,15 @@ document.querySelector("#addFromHistoryButton").addEventListener("click", () => 
   openTransactionSheet();
 });
 elements.managedTransactions.addEventListener("click", (event) => {
+  const editButton = event.target.closest("[data-edit-id]");
+  if (editButton) {
+    const transaction = state.transactions.find((item) => item.id === editButton.dataset.editId);
+    if (transaction) {
+      elements.transactionsSheet.close();
+      openTransactionSheet(transaction);
+    }
+    return;
+  }
   const deleteButton = event.target.closest("[data-delete-id]");
   if (deleteButton) deleteTransaction(deleteButton.dataset.deleteId);
 });
