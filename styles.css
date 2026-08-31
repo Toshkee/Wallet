@@ -27,7 +27,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .brand-copy { font-size: 19px; font-weight: 650; letter-spacing: -.03em; }
 .brand-copy span { margin-left: 3px; color: var(--red); }
 .topbar-actions { display: flex; align-items: center; gap: 9px; }
-.avatar, .icon-button { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 600; cursor: pointer; }
+.avatar, .icon-button { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 600; cursor: pointer; transition: border-color .18s ease, background-color .18s ease, color .18s ease, transform .18s ease; }
+.avatar[aria-expanded="true"] { border-color: rgba(213,21,43,.6); background: var(--red-soft); color: #f38b98; }
 .icon-button svg { width: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 
 main { padding-bottom: calc(88px + var(--safe-bottom)); }
@@ -220,7 +221,9 @@ main { padding-bottom: calc(88px + var(--safe-bottom)); }
 .delete-button:hover { color: var(--red); }
 .edit-button:hover { color: var(--ink); }
 .delete-button svg, .edit-button svg { width: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-.data-sheet-card { min-height: 48dvh; }
+.data-sheet-card { min-height: 0; padding-bottom: calc(20px + var(--safe-bottom)); }
+.data-sheet-card .sheet-head { margin-bottom: 14px; }
+.data-sheet-card .sheet-intro { max-width: 38ch; }
 .data-actions { border-top: 1px solid var(--line); }
 .data-actions button, .data-actions label { display: grid; grid-template-columns: 40px 1fr 20px; align-items: center; gap: 10px; width: 100%; min-height: 68px; padding: 8px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
 .data-action-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 11px; background: var(--surface-2); color: var(--red); font-size: 18px; }
@@ -251,6 +254,7 @@ main { padding-bottom: calc(88px + var(--safe-bottom)); }
   .chat-composer { margin-left: 14px; margin-right: 14px; }
   .balance-card { padding-left: 16px; padding-right: 16px; }
   .money { font-size: 38px; }
+  .sheet-card { padding-left: 15px; padding-right: 15px; }
 }
 
 @media (hover: hover) {

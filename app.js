@@ -833,7 +833,13 @@ elements.managedTransactions.addEventListener("click", (event) => {
 });
 
 document.querySelector("#closeDataButton").addEventListener("click", () => elements.dataSheet.close());
-document.querySelector("#profileButton").addEventListener("click", () => elements.dataSheet.showModal());
+document.querySelector("#profileButton").addEventListener("click", () => {
+  const button = document.querySelector("#profileButton");
+  if (elements.dataSheet.open) elements.dataSheet.close();
+  else elements.dataSheet.showModal();
+  button.setAttribute("aria-expanded", String(elements.dataSheet.open));
+});
+elements.dataSheet.addEventListener("close", () => document.querySelector("#profileButton").setAttribute("aria-expanded", "false"));
 document.querySelector("#exportDataButton").addEventListener("click", downloadBackup);
 elements.importDataInput.addEventListener("change", importBackup);
 document.querySelector(".brand").addEventListener("click", (event) => {
@@ -885,6 +891,31 @@ function enableSwipeToDismiss(sheet) {
     }
   });
   card.addEventListener("pointercancel", resetCard);
+  card.addEventListener("touchstart", (event) => {
+    if (card.scrollTop > 0 || !event.touches[0]) return;
+    startY = event.touches[0].clientY;
+    dragging = true;
+  }, { passive: true });
+  card.addEventListener("touchmove", (event) => {
+    if (!dragging || startY === null || !event.touches[0]) return;
+    const distance = event.touches[0].clientY - startY;
+    if (distance <= 0) return;
+    card.style.transition = "none";
+    card.style.transform = `translateY(${Math.min(distance, 180)}px)`;
+    if (event.cancelable) event.preventDefault();
+  }, { passive: false });
+  card.addEventListener("touchend", (event) => {
+    if (!dragging || startY === null) return;
+    const distance = (event.changedTouches[0]?.clientY || startY) - startY;
+    if (distance > 90) {
+      card.style.transition = "transform .18s ease";
+      card.style.transform = "translateY(100%)";
+      window.setTimeout(() => {
+        if (sheet.open) sheet.close("cancel");
+        resetCard();
+      }, 180);
+    } else resetCard();
+  }, { passive: true });
   sheet.addEventListener("close", resetCard);
 }
 
