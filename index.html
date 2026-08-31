@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="sr-ME">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="description" content="Vibe Wallet — lični pregled prihoda, troškova i uštede." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Vibe Wallet" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Vibe Wallet</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="Vibe Wallet početna">
+          <span class="brand-mark" aria-hidden="true">V</span>
+          <span class="brand-copy">VIBE<span>/</span>WALLET</span>
+        </a>
+        <div class="topbar-actions">
+          <button class="icon-button install-button" id="installButton" type="button" aria-label="Instaliraj aplikaciju" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" /></svg>
+          </button>
+          <button class="avatar" type="button" aria-label="Profil">VT</button>
+        </div>
+      </header>
+
+      <main id="top">
+        <section class="hero-section">
+          <div class="eyebrow-row">
+            <p class="eyebrow" id="dateLabel">AVGUST 2026</p>
+            <button class="privacy-toggle" id="privacyToggle" type="button" aria-label="Sakrij iznose">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+            </button>
+          </div>
+
+          <div class="period-switch" role="tablist" aria-label="Period pregleda">
+            <button type="button" data-period="day" role="tab">DANAS</button>
+            <button type="button" data-period="week" role="tab">NEĐELJA</button>
+            <button class="active" type="button" data-period="month" role="tab" aria-selected="true">MJESEC</button>
+          </div>
+
+          <article class="balance-card pixel-grid">
+            <div class="balance-card-head">
+              <p>OSTALO TI JE</p>
+              <span class="live-dot"><i></i> AŽURNO</span>
+            </div>
+            <h1 class="money private-value" id="balanceValue">530,00 €</h1>
+            <p class="balance-context" id="balanceContext">od 1.450,00 € prihoda ovog mjeseca</p>
+            <div class="budget-track" aria-label="Odnos potrošnje i prihoda">
+              <span id="budgetProgress"></span>
+            </div>
+            <dl class="balance-stats">
+              <div>
+                <dt><span class="status-dot income"></span>PRIHODI</dt>
+                <dd class="private-value" id="incomeValue">+1.450,00 €</dd>
+              </div>
+              <div>
+                <dt><span class="status-dot expense"></span>TROŠKOVI</dt>
+                <dd class="private-value" id="expenseValue">−920,00 €</dd>
+              </div>
+            </dl>
+          </article>
+        </section>
+
+        <section class="section-block" aria-labelledby="rhythmTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">TVOJ RITAM</p>
+              <h2 id="rhythmTitle">Posljednjih 7 dana</h2>
+            </div>
+            <p class="trend-pill" id="trendPill">−12% <span>vs. prije</span></p>
+          </div>
+          <div class="chart-card">
+            <div class="chart-summary">
+              <p>POTROŠENO</p>
+              <strong class="private-value" id="weekSpent">312,40 €</strong>
+            </div>
+            <div class="bar-chart" id="barChart" aria-label="Grafikon dnevne potrošnje"></div>
+          </div>
+        </section>
+
+        <section class="section-block" aria-labelledby="categoriesTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">KATEGORIJE</p>
+              <h2 id="categoriesTitle">Gdje odlazi novac</h2>
+            </div>
+            <button class="text-button" type="button" data-action="all-transactions">SVE <span>→</span></button>
+          </div>
+          <div class="category-list" id="categoryList"></div>
+        </section>
+
+        <section class="section-block ai-section" aria-labelledby="aiTitle">
+          <div class="ai-card">
+            <div class="ai-card-head">
+              <div class="ai-badge"><span class="spark">✦</span> VIBE AI</div>
+              <span class="ai-status">ANALIZA GOTOVA</span>
+            </div>
+            <h2 id="aiTitle">Možeš uštedjeti više.</h2>
+            <p id="aiInsight">Ovog mjeseca si potrošio više na restorane. Ako potrošnju ograničiš na 120 €, možeš uštedjeti:</p>
+            <div class="saving-grid">
+              <div>
+                <span>MJESEČNO</span>
+                <strong class="private-value" id="monthlySaving">90 €</strong>
+              </div>
+              <div>
+                <span>GODIŠNJE</span>
+                <strong class="private-value" id="yearlySaving">1.080 €</strong>
+              </div>
+            </div>
+            <button class="ai-button" id="openAiButton" type="button">NAPRAVI MI PLAN <span>↗</span></button>
+          </div>
+        </section>
+
+        <section class="section-block transactions-section" aria-labelledby="transactionsTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">AKTIVNOST</p>
+              <h2 id="transactionsTitle">Posljednje transakcije</h2>
+            </div>
+          </div>
+          <div class="transaction-list" id="transactionList"></div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Glavna navigacija">
+        <button class="nav-item active" type="button" data-nav="home">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 10 8-7 8 7v10h-6v-6h-4v6H4Z" /></svg>
+          <span>PREGLED</span>
+        </button>
+        <button class="nav-item" type="button" data-nav="transactions">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 12h14M5 19h9" /></svg>
+          <span>UNOSI</span>
+        </button>
+        <button class="add-fab" id="addButton" type="button" aria-label="Dodaj novu transakciju">
+          <span></span><span></span>
+        </button>
+        <button class="nav-item" type="button" data-nav="plan">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2" /></svg>
+          <span>PLAN</span>
+        </button>
+        <button class="nav-item" type="button" data-nav="more">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+          <span>VIŠE</span>
+        </button>
+      </nav>
+    </div>
+
+    <dialog class="sheet" id="transactionSheet">
+      <form method="dialog" class="sheet-card" id="transactionForm">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">NOVI UNOS</p>
+            <h2>Dodaj transakciju</h2>
+          </div>
+          <button class="close-button" value="cancel" type="submit" aria-label="Zatvori">×</button>
+        </div>
+
+        <button class="voice-button" id="voiceButton" type="button">
+          <span class="voice-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3m-3 0h6"/></svg>
+          </span>
+          <span><strong>RECI TROŠAK ILI PRIHOD</strong><small id="voiceHint">„18 eura za gorivo danas“</small></span>
+        </button>
+
+        <div class="type-switch" role="radiogroup" aria-label="Tip transakcije">
+          <label><input type="radio" name="type" value="expense" checked /><span>TROŠAK</span></label>
+          <label><input type="radio" name="type" value="income" /><span>PRIHOD</span></label>
+        </div>
+
+        <label class="field amount-field">
+          <span>IZNOS</span>
+          <span class="amount-input"><input id="amountInput" name="amount" inputmode="decimal" placeholder="0,00" required autocomplete="off" /><b>€</b></span>
+        </label>
+        <div class="field-grid">
+          <label class="field">
+            <span>KATEGORIJA</span>
+            <select id="categoryInput" name="category" required>
+              <option value="Hrana">Hrana</option>
+              <option value="Restorani">Restorani</option>
+              <option value="Računi">Računi</option>
+              <option value="Prevoz">Prevoz</option>
+              <option value="Kupovina">Kupovina</option>
+              <option value="Zabava">Zabava</option>
+              <option value="Plata">Plata</option>
+              <option value="Ostalo">Ostalo</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>DATUM</span>
+            <input id="dateInput" type="date" name="date" required />
+          </label>
+        </div>
+        <label class="field">
+          <span>NAPOMENA</span>
+          <input id="noteInput" name="note" placeholder="Npr. ručak sa ekipom" autocomplete="off" />
+        </label>
+        <button class="primary-button" type="submit" value="save">SAČUVAJ UNOS <span>→</span></button>
+      </form>
+    </dialog>
+
+    <dialog class="sheet" id="aiSheet">
+      <div class="sheet-card ai-sheet-card">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">VIBE AI</p>
+            <h2>Tvoj plan uštede</h2>
+          </div>
+          <button class="close-button" id="closeAiButton" type="button" aria-label="Zatvori">×</button>
+        </div>
+        <div class="ai-message" id="aiPlanMessage"></div>
+        <div class="ai-steps" id="aiSteps"></div>
+        <div class="ask-row">
+          <input id="aiQuestion" placeholder="Pitaj nešto o troškovima…" />
+          <button id="askAiButton" type="button" aria-label="Pošalji pitanje">→</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js" defer></script>
+  </body>
+</html>
