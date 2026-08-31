@@ -31,3 +31,5 @@ Zatim otvori `http://localhost:4173`.
 - zaključan prikaz bez pinch zooma i swipe-down zatvaranje popup prozora.
 
 Podaci u ovoj verziji ostaju samo u browseru uređaja. Cloud nalog, sinhronizacija i pravi AI servis su naredna razvojna faza.
+
+Nova instalacija počinje bez demo transakcija i bez unaprijed postavljenog cilja štednje.

@@ -1,6 +1,7 @@
-const STORAGE_KEY = "vibe-wallet-transactions-v1";
-const BUDGET_KEY = "vibe-wallet-budgets-v1";
-const GOAL_KEY = "vibe-wallet-goal-v1";
+const STORAGE_KEY = "vibe-wallet-transactions-v2";
+const BUDGET_KEY = "vibe-wallet-budgets-v2";
+const GOAL_KEY = "vibe-wallet-goal-v2";
+const CLEAN_START_KEY = "vibe-wallet-clean-start-v1";
 const DEFAULT_BUDGETS = {
   Hrana: 250,
   Restorani: 120,
@@ -31,6 +32,14 @@ const categoryMeta = {
   Plata: { icon: "+", color: "#63d39d" },
   Ostalo: { icon: "·", color: "#aaaaaa" },
 };
+
+function clearLegacyDemoData() {
+  if (localStorage.getItem(CLEAN_START_KEY)) return;
+  ["vibe-wallet-transactions-v1", "vibe-wallet-budgets-v1", "vibe-wallet-goal-v1"].forEach((key) => localStorage.removeItem(key));
+  localStorage.setItem(CLEAN_START_KEY, "done");
+}
+
+clearLegacyDemoData();
 
 const state = {
   page: "ai",
@@ -105,28 +114,6 @@ function localDate(date = new Date()) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
 
-function seedTransactions() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const day = now.getDate();
-  const atDay = (daysAgo) => localDate(new Date(y, m, Math.max(1, day - daysAgo)));
-  return [
-    { id: crypto.randomUUID(), type: "income", amount: 1450, category: "Plata", note: "Mjesečna plata", date: atDay(20) },
-    { id: crypto.randomUUID(), type: "expense", amount: 400, category: "Računi", note: "Kirija", date: atDay(19) },
-    { id: crypto.randomUUID(), type: "expense", amount: 70, category: "Restorani", note: "Večera", date: atDay(16) },
-    { id: crypto.randomUUID(), type: "expense", amount: 85, category: "Hrana", note: "Sedmična kupovina", date: atDay(13) },
-    { id: crypto.randomUUID(), type: "expense", amount: 58, category: "Restorani", note: "Ručak", date: atDay(10) },
-    { id: crypto.randomUUID(), type: "expense", amount: 60, category: "Računi", note: "Internet i telefon", date: atDay(8) },
-    { id: crypto.randomUUID(), type: "expense", amount: 48, category: "Prevoz", note: "Gorivo", date: atDay(6) },
-    { id: crypto.randomUUID(), type: "expense", amount: 45, category: "Restorani", note: "Ručak sa ekipom", date: atDay(5) },
-    { id: crypto.randomUUID(), type: "expense", amount: 62, category: "Hrana", note: "Market", date: atDay(4) },
-    { id: crypto.randomUUID(), type: "expense", amount: 30, category: "Kupovina", note: "Sitnice za kuću", date: atDay(3) },
-    { id: crypto.randomUUID(), type: "expense", amount: 37, category: "Restorani", note: "Kafa i doručak", date: atDay(1) },
-    { id: crypto.randomUUID(), type: "expense", amount: 25, category: "Prevoz", note: "Taksi", date: atDay(0) },
-  ];
-}
-
 function loadTransactions() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -134,9 +121,7 @@ function loadTransactions() {
   } catch (error) {
     console.warn("Sačuvani podaci nijesu dostupni.", error);
   }
-  const seeded = seedTransactions();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-  return seeded;
+  return [];
 }
 
 function saveTransactions() {
@@ -158,10 +143,7 @@ function saveBudgets() {
 }
 
 function defaultGoal() {
-  const deadline = new Date();
-  deadline.setDate(1);
-  deadline.setMonth(deadline.getMonth() + 10);
-  return { name: "Fond sigurnosti", target: 2000, saved: 200, deadline: localDate(deadline) };
+  return { name: "", target: 0, saved: 0, deadline: "" };
 }
 
 function loadGoal() {
@@ -338,6 +320,9 @@ function monthlyRestaurantSpend() {
 }
 
 function goalMetrics() {
+  if (!state.goal || !Number(state.goal.target)) {
+    return { target: 0, saved: 0, remaining: 0, months: 0, monthly: 0, percent: 0, deadline: null };
+  }
   const target = Math.max(0, Number(state.goal.target));
   const saved = Math.max(0, Number(state.goal.saved));
   const remaining = Math.max(0, target - saved);
@@ -357,13 +342,16 @@ function goalMetrics() {
 
 function renderGoal() {
   const metrics = goalMetrics();
-  elements.goalName.textContent = state.goal.name;
+  const hasGoal = Boolean(state.goal.name && metrics.target);
+  elements.goalName.textContent = hasGoal ? state.goal.name : "Postavi svoj prvi cilj";
   elements.goalPercent.textContent = `${metrics.percent}%`;
   elements.goalProgress.style.width = `${metrics.percent}%`;
-  elements.goalSaved.textContent = formatMoney(metrics.saved, true);
-  elements.goalTarget.textContent = formatMoney(metrics.target, true);
-  elements.goalMonthly.textContent = formatMoney(metrics.monthly, true);
-  elements.goalDeadline.textContent = `Rok: ${new Intl.DateTimeFormat("sr-Latn-ME", { month: "long", year: "numeric" }).format(metrics.deadline)} · još ${metrics.months} mj.`;
+  elements.goalSaved.textContent = hasGoal ? formatMoney(metrics.saved, true) : "—";
+  elements.goalTarget.textContent = hasGoal ? formatMoney(metrics.target, true) : "—";
+  elements.goalMonthly.textContent = hasGoal ? formatMoney(metrics.monthly, true) : "—";
+  elements.goalDeadline.textContent = hasGoal
+    ? `Rok: ${new Intl.DateTimeFormat("sr-Latn-ME", { month: "long", year: "numeric" }).format(metrics.deadline)} · još ${metrics.months} mj.`
+    : "Dodaj cilj da vidiš svoj mjesečni plan.";
 }
 
 function renderAiInsight() {
@@ -395,14 +383,14 @@ function buildAiPlan(customAnswer = "") {
     <div class="ai-step"><span class="ai-step-index">01</span><div><strong>Limit za restorane</strong><small>Prati se automatski svakog mjeseca</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit, true)}</span></div>
     <div class="ai-step"><span class="ai-step-index">02</span><div><strong>Nedjeljni okvir</strong><small>Podijeljeno na četiri realne cjeline</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit / 4, true)}</span></div>
     <div class="ai-step"><span class="ai-step-index">03</span><div><strong>Trenutno preostalo</strong><small>Prihodi minus evidentirani troškovi</small></div><span class="ai-step-amount">${formatMoney(summary.income - summary.expense, true)}</span></div>
-    <div class="ai-step"><span class="ai-step-index">04</span><div><strong>${escapeHtml(state.goal.name)}</strong><small>Potrebno mjesečno do izabranog roka</small></div><span class="ai-step-amount">${formatMoney(goal.monthly, true)}/mj.</span></div>
+    <div class="ai-step"><span class="ai-step-index">04</span><div><strong>${escapeHtml(state.goal.name || "Cilj štednje")}</strong><small>Potrebno mjesečno do izabranog roka</small></div><span class="ai-step-amount">${goal.monthly ? `${formatMoney(goal.monthly, true)}/mj.` : "—"}</span></div>
   `;
 }
 
 function openGoalSheet() {
   elements.goalNameInput.value = state.goal.name;
-  elements.goalTargetInput.value = String(state.goal.target).replace(".", ",");
-  elements.goalSavedInput.value = String(state.goal.saved).replace(".", ",");
+  elements.goalTargetInput.value = state.goal.target ? String(state.goal.target).replace(".", ",") : "";
+  elements.goalSavedInput.value = state.goal.saved ? String(state.goal.saved).replace(".", ",") : "";
   elements.goalDeadlineInput.value = state.goal.deadline;
   elements.goalDeadlineInput.min = localDate();
   elements.goalSheet.showModal();
@@ -701,7 +689,9 @@ function answerAiQuestion(questionOverride = "") {
   } else if (question.includes("ostalo") || question.includes("preostalo") || question.includes("imam")) {
     answer = `Ovog mjeseca ti je nakon evidentiranih troškova preostalo ${formatMoney(summary.income - summary.expense)}.`;
   } else if (question.includes("cilj") || question.includes("rok") || question.includes("fond") || question.includes("plan") || question.includes("šted")) {
-    answer = `Za cilj „${state.goal.name}“ ostalo ti je još ${formatMoney(goal.remaining)}. Da ga dostigneš do roka, planiraj približno ${formatMoney(goal.monthly)} mjesečno narednih ${goal.months} mjeseci.`;
+    answer = goal.target
+      ? `Za cilj „${state.goal.name}“ ostalo ti je još ${formatMoney(goal.remaining)}. Da ga dostigneš do roka, planiraj približno ${formatMoney(goal.monthly)} mjesečno narednih ${goal.months} mjeseci.`
+      : "Još nemaš postavljen cilj štednje. Otvori ekran Plan i dodaj prvi cilj.";
   } else if (question.includes("najviše") || question.includes("najvise") || question.includes("gdje")) {
     answer = topCategory
       ? `Najviše trošiš u kategoriji ${topCategory[0]}: ${formatMoney(topCategory[1])} ovog mjeseca.`
