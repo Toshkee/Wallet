@@ -1,5 +1,6 @@
 const STORAGE_KEY = "vibe-wallet-transactions-v1";
 const BUDGET_KEY = "vibe-wallet-budgets-v1";
+const GOAL_KEY = "vibe-wallet-goal-v1";
 const DEFAULT_BUDGETS = {
   Hrana: 250,
   Restorani: 120,
@@ -32,12 +33,14 @@ const categoryMeta = {
 };
 
 const state = {
+  page: "ai",
   period: "month",
   anchorDate: localDate(),
   private: false,
   editingId: null,
   transactions: loadTransactions(),
   budgets: loadBudgets(),
+  goal: loadGoal(),
   installPrompt: null,
 };
 
@@ -48,11 +51,12 @@ const elements = {
   incomeValue: document.querySelector("#incomeValue"),
   expenseValue: document.querySelector("#expenseValue"),
   budgetProgress: document.querySelector("#budgetProgress"),
-  weekSpent: document.querySelector("#weekSpent"),
-  trendPill: document.querySelector("#trendPill"),
-  barChart: document.querySelector("#barChart"),
   categoryList: document.querySelector("#categoryList"),
-  transactionList: document.querySelector("#transactionList"),
+  homeBalance: document.querySelector("#homeBalance"),
+  homeSpent: document.querySelector("#homeSpent"),
+  homeSaving: document.querySelector("#homeSaving"),
+  chatMessages: document.querySelector("#chatMessages"),
+  aiVoiceButton: document.querySelector("#aiVoiceButton"),
   transactionSheet: document.querySelector("#transactionSheet"),
   transactionForm: document.querySelector("#transactionForm"),
   amountInput: document.querySelector("#amountInput"),
@@ -64,7 +68,6 @@ const elements = {
   transactionSubmitLabel: document.querySelector("#transactionSubmitLabel"),
   voiceButton: document.querySelector("#voiceButton"),
   voiceHint: document.querySelector("#voiceHint"),
-  aiSheet: document.querySelector("#aiSheet"),
   aiPlanMessage: document.querySelector("#aiPlanMessage"),
   aiSteps: document.querySelector("#aiSteps"),
   aiQuestion: document.querySelector("#aiQuestion"),
@@ -75,7 +78,19 @@ const elements = {
   budgetSheet: document.querySelector("#budgetSheet"),
   budgetForm: document.querySelector("#budgetForm"),
   budgetFields: document.querySelector("#budgetFields"),
-  transactionsSheet: document.querySelector("#transactionsSheet"),
+  goalSheet: document.querySelector("#goalSheet"),
+  goalForm: document.querySelector("#goalForm"),
+  goalNameInput: document.querySelector("#goalNameInput"),
+  goalTargetInput: document.querySelector("#goalTargetInput"),
+  goalSavedInput: document.querySelector("#goalSavedInput"),
+  goalDeadlineInput: document.querySelector("#goalDeadlineInput"),
+  goalName: document.querySelector("#goalName"),
+  goalPercent: document.querySelector("#goalPercent"),
+  goalProgress: document.querySelector("#goalProgress"),
+  goalSaved: document.querySelector("#goalSaved"),
+  goalTarget: document.querySelector("#goalTarget"),
+  goalMonthly: document.querySelector("#goalMonthly"),
+  goalDeadline: document.querySelector("#goalDeadline"),
   managedTransactions: document.querySelector("#managedTransactions"),
   transactionManagerSummary: document.querySelector("#transactionManagerSummary"),
   dataSheet: document.querySelector("#dataSheet"),
@@ -140,6 +155,29 @@ function loadBudgets() {
 
 function saveBudgets() {
   localStorage.setItem(BUDGET_KEY, JSON.stringify(state.budgets));
+}
+
+function defaultGoal() {
+  const deadline = new Date();
+  deadline.setDate(1);
+  deadline.setMonth(deadline.getMonth() + 10);
+  return { name: "Fond sigurnosti", target: 2000, saved: 200, deadline: localDate(deadline) };
+}
+
+function loadGoal() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GOAL_KEY));
+    if (saved && typeof saved.name === "string" && Number(saved.target) > 0 && typeof saved.deadline === "string") {
+      return { ...saved, target: Number(saved.target), saved: Number(saved.saved || 0) };
+    }
+  } catch (error) {
+    console.warn("Sačuvani cilj nije dostupan.", error);
+  }
+  return defaultGoal();
+}
+
+function saveGoal() {
+  localStorage.setItem(GOAL_KEY, JSON.stringify(state.goal));
 }
 
 function startOfWeek(date) {
@@ -241,67 +279,27 @@ function renderDashboard() {
   const filtered = state.transactions.filter((item) => inCurrentPeriod(item));
   const summary = totals(filtered);
   const balance = summary.income - summary.expense;
+  const currentMonth = state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate()));
+  const currentMonthSummary = totals(currentMonth);
   const copy = periodCopy();
   elements.dateLabel.textContent = copy.label;
   const currentBounds = periodBounds(state.period, localDate());
   const selectedBounds = periodBounds();
   elements.nextPeriod.disabled = selectedBounds.end >= currentBounds.end;
   elements.balanceValue.textContent = formatMoney(balance);
-  elements.balanceContext.textContent = `od ${formatMoney(summary.income)} ${copy.context}`;
+  elements.balanceContext.textContent = `${formatMoney(summary.income)} prihoda u periodu`;
   elements.incomeValue.textContent = signedMoney(summary.income, "income");
   elements.expenseValue.textContent = signedMoney(summary.expense, "expense");
+  elements.homeBalance.textContent = formatMoney(currentMonthSummary.income - currentMonthSummary.expense);
+  elements.homeSpent.textContent = formatMoney(currentMonthSummary.expense, true);
   const used = summary.income ? Math.min(100, (summary.expense / summary.income) * 100) : 0;
   elements.budgetProgress.style.width = `${used}%`;
   elements.budgetProgress.style.background = used > 85 ? "#f3342f" : used > 65 ? "#f3c75f" : "#63d39d";
-  renderWeekChart();
   renderCategories(filtered, summary.expense);
-  renderTransactions(filtered);
+  renderGoal();
+  renderTransactionManager();
   renderAiInsight();
   applyPrivacy();
-}
-
-function renderWeekChart() {
-  const now = new Date(`${state.anchorDate}T12:00:00`);
-  const labels = ["NED", "PON", "UTO", "SRI", "ČET", "PET", "SUB"];
-  const days = [];
-  for (let i = 6; i >= 0; i -= 1) {
-    const date = new Date(now);
-    date.setDate(now.getDate() - i);
-    const key = localDate(date);
-    const spent = state.transactions
-      .filter((item) => item.type === "expense" && item.date === key)
-      .reduce((sum, item) => sum + Number(item.amount), 0);
-    days.push({ key, label: labels[date.getDay()], spent, today: i === 0 });
-  }
-  const currentSpent = days.reduce((sum, day) => sum + day.spent, 0);
-  const previousStart = new Date(now);
-  previousStart.setDate(now.getDate() - 13);
-  previousStart.setHours(0, 0, 0, 0);
-  const previousEnd = new Date(now);
-  previousEnd.setDate(now.getDate() - 7);
-  previousEnd.setHours(23, 59, 59, 999);
-  const previousSpent = state.transactions
-    .filter((item) => {
-      const date = new Date(`${item.date}T12:00:00`);
-      return item.type === "expense" && date >= previousStart && date <= previousEnd;
-    })
-    .reduce((sum, item) => sum + Number(item.amount), 0);
-  const max = Math.max(...days.map((day) => day.spent), 1);
-  elements.weekSpent.textContent = formatMoney(currentSpent);
-  elements.barChart.innerHTML = days.map((day) => `
-    <div class="bar-column ${day.today ? "today" : ""}" title="${escapeHtml(day.label)}: ${formatMoney(day.spent)}">
-      <i style="height:${Math.max(4, (day.spent / max) * 105)}px"></i>
-      <span>${day.label}</span>
-    </div>
-  `).join("");
-  if (!previousSpent) {
-    elements.trendPill.innerHTML = `NOVA <span>neđelja</span>`;
-    elements.trendPill.classList.remove("up");
-  } else {
-    const difference = Math.round(((currentSpent - previousSpent) / previousSpent) * 100);
-    elements.trendPill.innerHTML = `${difference > 0 ? "+" : ""}${difference}% <span>vs. prije</span>`;
-    elements.trendPill.classList.toggle("up", difference > 0);
-  }
 }
 
 function renderCategories(transactions, totalExpense) {
@@ -311,7 +309,7 @@ function renderCategories(transactions, totalExpense) {
       result[item.category] = (result[item.category] || 0) + Number(item.amount);
       return result;
     }, {});
-  const sorted = Object.entries(categories).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const sorted = Object.entries(categories).sort((a, b) => b[1] - a[1]).slice(0, 3);
   if (!sorted.length) {
     elements.categoryList.innerHTML = `<div class="empty-state">Još nema troškova za ovaj period.</div>`;
     return;
@@ -325,28 +323,9 @@ function renderCategories(transactions, totalExpense) {
     return `
       <article class="category-item">
         <div class="category-icon" style="color:${meta.color}">${meta.icon}</div>
-        <div class="category-copy"><strong>${escapeHtml(category)}</strong><span>${showsBudget ? `${formatMoney(amount, true)} od ${formatMoney(limit, true)}` : `${percent}% svih troškova`}</span></div>
-        <div class="category-amount"><strong class="private-value">${formatMoney(amount)}</strong><span>${showsBudget ? `${budgetPercent}% LIMITA` : `${percent}%`}</span></div>
+        <div class="category-copy"><strong>${escapeHtml(category)}</strong><span>${showsBudget ? `Limit ${formatMoney(limit, true)}` : `${percent}% troškova`}</span></div>
+        <div class="category-amount"><strong class="private-value">${formatMoney(amount)}</strong></div>
         ${showsBudget ? `<div class="category-progress ${budgetPercent > 100 ? "over" : ""}"><span style="width:${Math.min(100, budgetPercent)}%"></span></div>` : ""}
-      </article>
-    `;
-  }).join("");
-}
-
-function renderTransactions(transactions) {
-  const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
-  if (!sorted.length) {
-    elements.transactionList.innerHTML = `<div class="empty-state">Nema unosa. Dodaj prvi preko crvenog + dugmeta.</div>`;
-    return;
-  }
-  elements.transactionList.innerHTML = sorted.map((item) => {
-    const meta = categoryMeta[item.category] || categoryMeta.Ostalo;
-    const date = new Intl.DateTimeFormat("sr-Latn-ME", { day: "numeric", month: "short" }).format(new Date(`${item.date}T12:00:00`));
-    return `
-      <article class="transaction-item">
-        <div class="transaction-icon" style="color:${meta.color}">${meta.icon}</div>
-        <div class="transaction-copy"><strong>${escapeHtml(item.note || item.category)}</strong><span>${escapeHtml(item.category)} · ${date}</span></div>
-        <div class="transaction-amount private-value ${item.type}">${signedMoney(item.amount, item.type)}</div>
       </article>
     `;
   }).join("");
@@ -354,8 +333,37 @@ function renderTransactions(transactions) {
 
 function monthlyRestaurantSpend() {
   return state.transactions
-    .filter((item) => item.type === "expense" && item.category === "Restorani" && inCurrentPeriod(item, "month", state.anchorDate))
+    .filter((item) => item.type === "expense" && item.category === "Restorani" && inCurrentPeriod(item, "month", localDate()))
     .reduce((sum, item) => sum + Number(item.amount), 0);
+}
+
+function goalMetrics() {
+  const target = Math.max(0, Number(state.goal.target));
+  const saved = Math.max(0, Number(state.goal.saved));
+  const remaining = Math.max(0, target - saved);
+  const deadline = new Date(`${state.goal.deadline}T23:59:59`);
+  const millisecondsPerMonth = 1000 * 60 * 60 * 24 * 30.4375;
+  const months = Math.max(1, Math.ceil((deadline.getTime() - Date.now()) / millisecondsPerMonth));
+  return {
+    target,
+    saved,
+    remaining,
+    months,
+    monthly: remaining / months,
+    percent: target ? Math.min(100, Math.round((saved / target) * 100)) : 0,
+    deadline,
+  };
+}
+
+function renderGoal() {
+  const metrics = goalMetrics();
+  elements.goalName.textContent = state.goal.name;
+  elements.goalPercent.textContent = `${metrics.percent}%`;
+  elements.goalProgress.style.width = `${metrics.percent}%`;
+  elements.goalSaved.textContent = formatMoney(metrics.saved, true);
+  elements.goalTarget.textContent = formatMoney(metrics.target, true);
+  elements.goalMonthly.textContent = formatMoney(metrics.monthly, true);
+  elements.goalDeadline.textContent = `Rok: ${new Intl.DateTimeFormat("sr-Latn-ME", { month: "long", year: "numeric" }).format(metrics.deadline)} · još ${metrics.months} mj.`;
 }
 
 function renderAiInsight() {
@@ -364,12 +372,13 @@ function renderAiInsight() {
   const saving = Math.max(0, restaurantSpend - restaurantLimit);
   const yearly = saving * 12;
   if (saving > 0) {
-    elements.aiInsight.textContent = `Ovog mjeseca si potrošio ${formatMoney(restaurantSpend)} na restorane. Ako potrošnju ograničiš na ${formatMoney(restaurantLimit, true)}, možeš uštedjeti:`;
+    elements.aiInsight.textContent = `Restorani su ${formatMoney(saving, true)} iznad limita od ${formatMoney(restaurantLimit, true)}.`;
   } else {
-    elements.aiInsight.textContent = `Potrošnja na restorane je trenutno unutar predloženog limita od ${formatMoney(restaurantLimit, true)}. Nastavi ovim tempom.`;
+    elements.aiInsight.textContent = "Potrošnja je trenutno u okviru tvojih limita.";
   }
   elements.monthlySaving.textContent = formatMoney(saving, true);
   elements.yearlySaving.textContent = formatMoney(yearly, true);
+  elements.homeSaving.textContent = `${formatMoney(saving, true)}/mj.`;
 }
 
 function buildAiPlan(customAnswer = "") {
@@ -377,7 +386,8 @@ function buildAiPlan(customAnswer = "") {
   const restaurantLimit = Number(state.budgets.Restorani || 120);
   const saving = Math.max(0, spend - restaurantLimit);
   const annual = saving * 12;
-  const summary = totals(state.transactions.filter((item) => inCurrentPeriod(item, "month", state.anchorDate)));
+  const summary = totals(state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate())));
+  const goal = goalMetrics();
   elements.aiPlanMessage.textContent = customAnswer || (saving
     ? `Najlakša prilika je kategorija Restorani. Sa limita od ${formatMoney(restaurantLimit, true)} zadržavaš isti stil života, a oslobađaš oko ${formatMoney(saving, true)} mjesečno i ${formatMoney(annual, true)} godišnje.`
     : `Trenutno si u okviru predloženog limita za restorane. Sljedeći plan mogu napraviti kada dodamo još tvojih stvarnih troškova.`);
@@ -385,7 +395,42 @@ function buildAiPlan(customAnswer = "") {
     <div class="ai-step"><span class="ai-step-index">01</span><div><strong>Limit za restorane</strong><small>Prati se automatski svakog mjeseca</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit, true)}</span></div>
     <div class="ai-step"><span class="ai-step-index">02</span><div><strong>Nedjeljni okvir</strong><small>Podijeljeno na četiri realne cjeline</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit / 4, true)}</span></div>
     <div class="ai-step"><span class="ai-step-index">03</span><div><strong>Trenutno preostalo</strong><small>Prihodi minus evidentirani troškovi</small></div><span class="ai-step-amount">${formatMoney(summary.income - summary.expense, true)}</span></div>
+    <div class="ai-step"><span class="ai-step-index">04</span><div><strong>${escapeHtml(state.goal.name)}</strong><small>Potrebno mjesečno do izabranog roka</small></div><span class="ai-step-amount">${formatMoney(goal.monthly, true)}/mj.</span></div>
   `;
+}
+
+function openGoalSheet() {
+  elements.goalNameInput.value = state.goal.name;
+  elements.goalTargetInput.value = String(state.goal.target).replace(".", ",");
+  elements.goalSavedInput.value = String(state.goal.saved).replace(".", ",");
+  elements.goalDeadlineInput.value = state.goal.deadline;
+  elements.goalDeadlineInput.min = localDate();
+  elements.goalSheet.showModal();
+}
+
+function handleGoalSubmit(event) {
+  event.preventDefault();
+  if (event.submitter?.value === "cancel") {
+    elements.goalSheet.close();
+    return;
+  }
+  const data = new FormData(elements.goalForm);
+  const target = Number(String(data.get("target")).replace(",", "."));
+  const saved = Number(String(data.get("saved")).replace(",", "."));
+  if (!Number.isFinite(target) || target <= 0 || !Number.isFinite(saved) || saved < 0) {
+    showToast("Provjeri iznose cilja i dosadašnje štednje.");
+    return;
+  }
+  state.goal = {
+    name: String(data.get("name")).trim(),
+    target,
+    saved,
+    deadline: String(data.get("deadline")),
+  };
+  saveGoal();
+  elements.goalSheet.close();
+  renderDashboard();
+  showToast("Cilj štednje je sačuvan.");
 }
 
 function openBudgetSheet() {
@@ -420,13 +465,11 @@ function handleBudgetSubmit(event) {
 }
 
 function renderTransactionManager() {
-  const filtered = state.transactions
-    .filter((item) => inCurrentPeriod(item))
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const filtered = [...state.transactions].sort((a, b) => b.date.localeCompare(a.date));
   const summary = totals(filtered);
-  elements.transactionManagerSummary.textContent = `${periodCopy().label}: ${filtered.length} unosa · ${formatMoney(summary.income)} prihoda · ${formatMoney(summary.expense)} troškova`;
+  elements.transactionManagerSummary.textContent = `${filtered.length} unosa · ${formatMoney(summary.income)} prihoda · ${formatMoney(summary.expense)} troškova`;
   if (!filtered.length) {
-    elements.managedTransactions.innerHTML = `<div class="empty-state">Nema unosa u ovom periodu.</div>`;
+    elements.managedTransactions.innerHTML = `<div class="empty-state">Još nema unosa.</div>`;
     return;
   }
   elements.managedTransactions.innerHTML = filtered.map((item) => {
@@ -449,11 +492,6 @@ function renderTransactionManager() {
   applyPrivacy();
 }
 
-function openTransactionsSheet() {
-  renderTransactionManager();
-  elements.transactionsSheet.showModal();
-}
-
 function deleteTransaction(id) {
   const transaction = state.transactions.find((item) => item.id === id);
   if (!transaction) return;
@@ -472,6 +510,7 @@ function downloadBackup() {
     exportedAt: new Date().toISOString(),
     transactions: state.transactions,
     budgets: state.budgets,
+    goal: state.goal,
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -494,12 +533,17 @@ async function importBackup(event) {
       item && typeof item.id === "string" && ["income", "expense"].includes(item.type) && Number.isFinite(Number(item.amount)) && typeof item.date === "string"
     );
     const validBudgets = backup.budgets && typeof backup.budgets === "object" && !Array.isArray(backup.budgets);
-    if (!validTransactions || !validBudgets) throw new Error("Neispravan format");
+    const validGoal = !backup.goal || (typeof backup.goal.name === "string" && Number(backup.goal.target) > 0 && typeof backup.goal.deadline === "string");
+    if (!validTransactions || !validBudgets || !validGoal) throw new Error("Neispravan format");
     if (!window.confirm(`Uvesti ${backup.transactions.length} transakcija? Trenutni lokalni podaci biće zamijenjeni.`)) return;
     state.transactions = backup.transactions.map((item) => ({ ...item, amount: Number(item.amount) }));
     state.budgets = { ...DEFAULT_BUDGETS, ...backup.budgets };
+    state.goal = backup.goal
+      ? { ...backup.goal, target: Number(backup.goal.target), saved: Number(backup.goal.saved || 0) }
+      : defaultGoal();
     saveTransactions();
     saveBudgets();
+    saveGoal();
     state.anchorDate = localDate();
     renderDashboard();
     elements.dataSheet.close();
@@ -615,14 +659,40 @@ function startVoiceInput() {
   recognition.start();
 }
 
-function answerAiQuestion() {
-  const question = elements.aiQuestion.value.trim().toLocaleLowerCase("sr");
+function appendChatMessage(role, message) {
+  const item = document.createElement("div");
+  item.className = `chat-message ${role}`;
+  if (role === "assistant") {
+    const avatar = document.createElement("span");
+    avatar.className = "chat-avatar";
+    avatar.textContent = "✦";
+    item.appendChild(avatar);
+  }
+  const text = document.createElement("p");
+  text.textContent = message;
+  item.appendChild(text);
+  elements.chatMessages.appendChild(item);
+  item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function answerAiQuestion(questionOverride = "") {
+  const originalQuestion = String(questionOverride || elements.aiQuestion.value).trim();
+  const question = originalQuestion.toLocaleLowerCase("sr");
   if (!question) return;
-  const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", state.anchorDate));
+  appendChatMessage("user", originalQuestion);
+  const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate()));
   const summary = totals(monthTransactions);
   const restaurants = monthlyRestaurantSpend();
   const restaurantLimit = Number(state.budgets.Restorani || 120);
   const saving = Math.max(0, restaurants - restaurantLimit);
+  const goal = goalMetrics();
+  const categories = monthTransactions
+    .filter((item) => item.type === "expense")
+    .reduce((result, item) => {
+      result[item.category] = (result[item.category] || 0) + Number(item.amount);
+      return result;
+    }, {});
+  const topCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0];
   let answer;
   if (question.includes("restoran") || question.includes("ručak") || question.includes("rucak")) {
     answer = `Na restorane si ovog mjeseca potrošio ${formatMoney(restaurants)}. Tvoj limit je ${formatMoney(restaurantLimit)}, pa je moguća mjesečna ušteda ${formatMoney(saving)}.`;
@@ -630,11 +700,37 @@ function answerAiQuestion() {
     answer = `Prema trenutnim unosima, samo smanjenjem restorana možeš sačuvati ${formatMoney(saving)} mjesečno, odnosno ${formatMoney(saving * 12)} godišnje.`;
   } else if (question.includes("ostalo") || question.includes("preostalo") || question.includes("imam")) {
     answer = `Ovog mjeseca ti je nakon evidentiranih troškova preostalo ${formatMoney(summary.income - summary.expense)}.`;
+  } else if (question.includes("cilj") || question.includes("rok") || question.includes("fond") || question.includes("plan") || question.includes("šted")) {
+    answer = `Za cilj „${state.goal.name}“ ostalo ti je još ${formatMoney(goal.remaining)}. Da ga dostigneš do roka, planiraj približno ${formatMoney(goal.monthly)} mjesečno narednih ${goal.months} mjeseci.`;
+  } else if (question.includes("najviše") || question.includes("najvise") || question.includes("gdje")) {
+    answer = topCategory
+      ? `Najviše trošiš u kategoriji ${topCategory[0]}: ${formatMoney(topCategory[1])} ovog mjeseca.`
+      : "Još nema dovoljno troškova za poređenje kategorija.";
   } else {
-    answer = `Za ovaj mjesec vidim ${formatMoney(summary.income)} prihoda i ${formatMoney(summary.expense)} troškova. Pitaj me koliko ti je ostalo, koliko trošiš na restorane ili koliko možeš uštedjeti.`;
+    answer = `Za ovaj mjesec vidim ${formatMoney(summary.income)} prihoda i ${formatMoney(summary.expense)} troškova. Pitaj me koliko ti je ostalo, koliko možeš uštedjeti ili da li stižeš do cilja.`;
   }
   buildAiPlan(answer);
   elements.aiQuestion.value = "";
+  window.setTimeout(() => appendChatMessage("assistant", answer), 220);
+}
+
+function startAiVoiceInput() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast("Glasovni unos nije podržan u ovom browseru.");
+    return;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = "sr-RS";
+  recognition.interimResults = false;
+  elements.aiVoiceButton.classList.add("listening");
+  recognition.addEventListener("result", (event) => {
+    elements.aiQuestion.value = event.results[0][0].transcript;
+    answerAiQuestion();
+  });
+  recognition.addEventListener("error", () => showToast("Nijesam jasno čuo. Pokušaj ponovo."));
+  recognition.addEventListener("end", () => elements.aiVoiceButton.classList.remove("listening"));
+  recognition.start();
 }
 
 let toastTimer;
@@ -649,6 +745,22 @@ function applyPrivacy() {
   document.querySelectorAll(".private-value").forEach((element) => element.classList.toggle("is-hidden-value", state.private));
   document.querySelector("#privacyToggle").classList.toggle("is-private", state.private);
   document.querySelector("#privacyToggle").setAttribute("aria-label", state.private ? "Prikaži iznose" : "Sakrij iznose");
+}
+
+function navigateToPage(pageName, updateHash = true) {
+  const validPages = ["ai", "overview", "entries", "plan"];
+  const nextPage = validPages.includes(pageName) ? pageName : "ai";
+  state.page = nextPage;
+  document.querySelectorAll(".app-page").forEach((page) => {
+    const active = page.dataset.page === nextPage;
+    page.hidden = !active;
+    page.classList.toggle("active", active);
+  });
+  document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === nextPage));
+  if (nextPage === "entries") renderTransactionManager();
+  if (nextPage === "plan") buildAiPlan();
+  window.scrollTo({ top: 0, behavior: updateHash ? "smooth" : "auto" });
+  if (updateHash) history.replaceState(null, "", `#${nextPage}`);
 }
 
 document.querySelectorAll("[data-period]").forEach((button) => {
@@ -673,34 +785,34 @@ document.querySelector("#privacyToggle").addEventListener("click", () => {
 });
 
 document.querySelector("#addButton").addEventListener("click", () => openTransactionSheet());
+document.querySelector("#addFromEntriesButton").addEventListener("click", () => openTransactionSheet());
 elements.transactionForm.addEventListener("submit", handleTransactionSubmit);
 elements.voiceButton.addEventListener("click", startVoiceInput);
 
 document.querySelector("#openAiButton").addEventListener("click", () => {
-  buildAiPlan();
-  elements.aiSheet.showModal();
+  navigateToPage("ai");
+  answerAiQuestion("Kako da ostvarim svoj plan štednje?");
 });
-document.querySelector("#closeAiButton").addEventListener("click", () => elements.aiSheet.close());
-document.querySelector("#askAiButton").addEventListener("click", answerAiQuestion);
+document.querySelector("#askAiButton").addEventListener("click", () => answerAiQuestion());
 elements.aiQuestion.addEventListener("keydown", (event) => {
   if (event.key === "Enter") answerAiQuestion();
 });
+elements.aiVoiceButton.addEventListener("click", startAiVoiceInput);
+document.querySelectorAll("[data-question]").forEach((button) => {
+  button.addEventListener("click", () => answerAiQuestion(button.dataset.question));
+});
 
 document.querySelector("#openBudgetButton").addEventListener("click", openBudgetSheet);
+document.querySelector("#planBudgetButton").addEventListener("click", openBudgetSheet);
 elements.budgetForm.addEventListener("submit", handleBudgetSubmit);
+document.querySelector("#openGoalButton").addEventListener("click", openGoalSheet);
+elements.goalForm.addEventListener("submit", handleGoalSubmit);
 
-document.querySelector("#openTransactionsButton").addEventListener("click", openTransactionsSheet);
-document.querySelector("#closeTransactionsButton").addEventListener("click", () => elements.transactionsSheet.close());
-document.querySelector("#addFromHistoryButton").addEventListener("click", () => {
-  elements.transactionsSheet.close();
-  openTransactionSheet();
-});
 elements.managedTransactions.addEventListener("click", (event) => {
   const editButton = event.target.closest("[data-edit-id]");
   if (editButton) {
     const transaction = state.transactions.find((item) => item.id === editButton.dataset.editId);
     if (transaction) {
-      elements.transactionsSheet.close();
       openTransactionSheet(transaction);
     }
     return;
@@ -710,20 +822,16 @@ elements.managedTransactions.addEventListener("click", (event) => {
 });
 
 document.querySelector("#closeDataButton").addEventListener("click", () => elements.dataSheet.close());
+document.querySelector("#profileButton").addEventListener("click", () => elements.dataSheet.showModal());
 document.querySelector("#exportDataButton").addEventListener("click", downloadBackup);
 elements.importDataInput.addEventListener("change", importBackup);
+document.querySelector(".brand").addEventListener("click", (event) => {
+  event.preventDefault();
+  navigateToPage("ai");
+});
 
 document.querySelectorAll("[data-nav]").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll("[data-nav]").forEach((item) => item.classList.toggle("active", item === button));
-    if (button.dataset.nav === "home") window.scrollTo({ top: 0, behavior: "smooth" });
-    if (button.dataset.nav === "transactions") openTransactionsSheet();
-    if (button.dataset.nav === "plan") {
-      buildAiPlan();
-      elements.aiSheet.showModal();
-    }
-    if (button.dataset.nav === "more") elements.dataSheet.showModal();
-  });
+  button.addEventListener("click", () => navigateToPage(button.dataset.nav));
 });
 
 window.addEventListener("beforeinstallprompt", (event) => {
@@ -747,3 +855,4 @@ if ("serviceWorker" in navigator) {
 }
 
 renderDashboard();
+navigateToPage(location.hash.slice(1) || "ai", false);
