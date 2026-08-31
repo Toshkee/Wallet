@@ -51,6 +51,7 @@ const state = {
   budgets: loadBudgets(),
   goal: loadGoal(),
   installPrompt: null,
+  aiPending: false,
 };
 
 const elements = {
@@ -80,6 +81,7 @@ const elements = {
   aiPlanMessage: document.querySelector("#aiPlanMessage"),
   aiSteps: document.querySelector("#aiSteps"),
   aiQuestion: document.querySelector("#aiQuestion"),
+  askAiButton: document.querySelector("#askAiButton"),
   aiInsight: document.querySelector("#aiInsight"),
   monthlySaving: document.querySelector("#monthlySaving"),
   yearlySaving: document.querySelector("#yearlySaving"),
@@ -698,15 +700,74 @@ function appendChatMessage(role, message) {
   item.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+function appendThinkingMessage() {
+  const item = document.createElement("div");
+  item.className = "chat-message assistant is-thinking";
+  const avatar = document.createElement("span");
+  avatar.className = "chat-avatar";
+  avatar.textContent = "✦";
+  const dots = document.createElement("p");
+  dots.className = "typing-dots";
+  dots.setAttribute("aria-label", "Asistent piše");
+  dots.innerHTML = "<span></span><span></span><span></span>";
+  item.append(avatar, dots);
+  elements.chatMessages.appendChild(item);
+  item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  return item;
+}
+
+function appendTypedAssistantMessage(message) {
+  return new Promise((resolve) => {
+    const item = document.createElement("div");
+    item.className = "chat-message assistant";
+    const avatar = document.createElement("span");
+    avatar.className = "chat-avatar";
+    avatar.textContent = "✦";
+    const text = document.createElement("p");
+    item.append(avatar, text);
+    elements.chatMessages.appendChild(item);
+    const value = String(message || "");
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion || !value) {
+      text.textContent = value;
+      item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      resolve();
+      return;
+    }
+    let position = 0;
+    const step = Math.max(1, Math.ceil(value.length / 72));
+    const typeNext = () => {
+      position = Math.min(value.length, position + step);
+      text.textContent = value.slice(0, position);
+      elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+      if (position < value.length) window.setTimeout(typeNext, 18);
+      else resolve();
+    };
+    typeNext();
+  });
+}
+
+function finishAiReply() {
+  state.aiPending = false;
+  elements.askAiButton.disabled = false;
+}
+
 async function answerAiQuestion(questionOverride = "") {
   const originalQuestion = String(questionOverride || elements.aiQuestion.value).trim();
   const question = originalQuestion.toLocaleLowerCase("sr");
   if (!question) return;
+  if (state.aiPending) {
+    showToast("Sačekaj da završim prethodni odgovor.");
+    return;
+  }
+  state.aiPending = true;
+  elements.askAiButton.disabled = true;
   appendChatMessage("user", originalQuestion);
+  elements.aiQuestion.value = "";
   const chatTransaction = addTransactionFromChat(originalQuestion);
   if (chatTransaction.needsAmount) {
-    elements.aiQuestion.value = "";
-    window.setTimeout(() => appendChatMessage("assistant", "Mogu. Samo mi napiši iznos, na primjer: „Dodaj danas 20 € za gorivo“."), 120);
+    await appendTypedAssistantMessage("Mogu. Samo mi napiši iznos, na primjer: „Dodaj danas 20 € za gorivo“.");
+    finishAiReply();
     return;
   }
   if (chatTransaction.transaction) {
@@ -714,9 +775,9 @@ async function answerAiQuestion(questionOverride = "") {
     const kind = item.type === "income" ? "prihod" : "trošak";
     const dateLabel = item.date === localDate() ? "za danas" : "za juče";
     const confirmation = `Dodao sam ${kind} od ${formatMoney(item.amount)} za ${item.category} ${dateLabel}.`;
-    elements.aiQuestion.value = "";
     buildAiPlan(confirmation);
-    window.setTimeout(() => appendChatMessage("assistant", confirmation), 120);
+    await appendTypedAssistantMessage(confirmation);
+    finishAiReply();
     return;
   }
   const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate()));
@@ -754,6 +815,7 @@ async function answerAiQuestion(questionOverride = "") {
     answer = "Ja sam Vibe Wallet, tvoj finansijski asistent. Pomažem ti da pratiš troškove, prihode, limite i ciljeve štednje.";
   }
   const localAnswer = answer;
+  const thinking = appendThinkingMessage();
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -773,10 +835,12 @@ async function answerAiQuestion(questionOverride = "") {
     }
   } catch (error) {
     // Keep the local answer when the API is unavailable or not configured.
+  } finally {
+    thinking.remove();
   }
   buildAiPlan(answer);
-  elements.aiQuestion.value = "";
-  window.setTimeout(() => appendChatMessage("assistant", answer || localAnswer), 220);
+  await appendTypedAssistantMessage(answer || localAnswer);
+  finishAiReply();
 }
 
 function legacyStartAiVoiceInput() {
@@ -903,7 +967,9 @@ function startAiVoiceInput() {
     button: elements.aiVoiceButton,
     onTranscript: (transcript) => {
       elements.aiQuestion.value = transcript;
-      answerAiQuestion();
+      elements.aiQuestion.focus();
+      elements.aiQuestion.setSelectionRange(transcript.length, transcript.length);
+      showToast("Diktat je unesen. Provjeri i pošalji poruku.");
     }
   });
 }
