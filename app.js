@@ -674,7 +674,6 @@ function legacyStartVoiceInput() {
     elements.categoryInput.value = result.category;
     elements.noteInput.value = result.note;
     document.querySelector(`input[name="type"][value="${result.type}"]`).checked = true;
-    showToast("Glas je prepoznat — provjeri i potvrdi unos.");
   });
   recognition.addEventListener("error", () => showToast("Nijesam jasno čuo. Pokušaj ponovo."));
   recognition.addEventListener("end", () => {
@@ -928,7 +927,6 @@ async function toggleVoiceCapture({ button, onTranscript, onStart, onStop }) {
       onStop?.();
       if (!chunks.length) return showToast("Nijesam čuo snimak. Pokušaj ponovo.");
       button.disabled = true;
-      showToast("Prepisujem glas…");
       try {
         const actualMimeType = recorder.mimeType || mimeType || "audio/webm";
         const transcript = await transcribeVoice(new Blob(chunks, { type: actualMimeType }), actualMimeType);
@@ -940,7 +938,6 @@ async function toggleVoiceCapture({ button, onTranscript, onStart, onStop }) {
       }
     }, { once: true });
     recorder.start();
-    showToast("Snimam… dodirni mikrofon ponovo kada završiš.");
   } catch (error) {
     showToast(error.name === "NotAllowedError" ? "Dozvoli mikrofon za Wallet u postavkama telefona." : "Mikrofon trenutno nije dostupan.");
   }
@@ -950,14 +947,14 @@ function startVoiceInput() {
   toggleVoiceCapture({
     button: elements.voiceButton,
     onStart: () => { elements.voiceHint.textContent = "Snimam… dodirni ponovo kada završiš"; },
-    onStop: () => { elements.voiceHint.textContent = "„18 eura za gorivo danas“"; },
+    onStop: () => { elements.voiceHint.textContent = "Prepisujem glas…"; },
     onTranscript: (transcript) => {
       const result = parseVoiceInput(transcript);
       elements.amountInput.value = result.amount;
       elements.categoryInput.value = result.category;
       elements.noteInput.value = result.note;
       document.querySelector(`input[name="type"][value="${result.type}"]`).checked = true;
-      showToast("Glas je prepoznat — provjeri i potvrdi unos.");
+      elements.voiceHint.textContent = "Prepoznato — provjeri i potvrdi unos.";
     }
   });
 }
@@ -969,7 +966,6 @@ function startAiVoiceInput() {
       elements.aiQuestion.value = transcript;
       elements.aiQuestion.focus();
       elements.aiQuestion.setSelectionRange(transcript.length, transcript.length);
-      showToast("Diktat je unesen. Provjeri i pošalji poruku.");
     }
   });
 }
