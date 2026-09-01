@@ -13,6 +13,8 @@ Zatim otvori `http://localhost:4173`.
 ## Funkcionalnosti
 
 - AI početni ekran sa Gemini odgovorima i brzim pitanjima;
+- stanje računa: uneseš koliko imaš, a svaki novi prihod i trošak ga automatski mijenja;
+- sopstvene kategorije i raspodjela novca po kategorijama (i kroz chat: „odvoji 200 za hranu“);
 - unos troškova i prihoda kroz formu, chat komandu ili glas;
 - glasovni diktat prvo popunjava chat polje, pa korisnik odlučuje kada šalje;
 - dnevni, nedjeljni i mjesečni pregled, sa kretanjem kroz ranije periode;
@@ -28,7 +30,7 @@ API ključ ostaje samo na Vercelu. Chat endpoint šalje Gemini-ju sažetak, limi
 
 ## Podaci i privatnost
 
-Transakcije, limiti i cilj čuvaju se lokalno u browseru uređaja. Izvoz backup-a je preporučen prije promjene telefona, browsera ili ponovne instalacije PWA aplikacije.
+Transakcije, stanje računa, kategorije, raspodjela i cilj čuvaju se lokalno u browseru uređaja (localStorage) i ne brišu se pri ažuriranju aplikacije. Podaci su vezani za adresu sajta, pa preview adrese na Vercelu (druga adresa po deploy-u) ne vide podatke sa glavne adrese; koristi uvijek istu, produkcijsku adresu. Izvoz backup-a je preporučen prije promjene telefona, browsera ili ponovne instalacije PWA aplikacije.
 
 ## Provjere
 

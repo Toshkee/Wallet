@@ -37,10 +37,14 @@
             </div>
           </header>
 
-          <div class="home-summary">
+          <div class="home-summary" id="homeBalanceCard">
             <div class="home-summary-main">
-              <span>Dostupno ovog mjeseca</span>
-              <strong class="private-value" id="homeBalance">0,00 €</strong>
+              <div class="home-summary-head">
+                <span id="homeBalanceLabel">Stanje računa</span>
+                <button class="text-button" id="openAccountButton" type="button">Podesi stanje</button>
+              </div>
+              <strong class="private-value" id="homeBalance">—</strong>
+              <p class="home-summary-hint" id="homeBalanceHint">Unesi koliko trenutno imaš na računu.</p>
             </div>
             <div class="home-summary-grid">
               <div><span>Potrošeno</span><strong class="private-value" id="homeSpent">0 €</strong></div>
@@ -51,11 +55,12 @@
           <div class="chat-thread" id="chatMessages" aria-live="polite">
             <div class="chat-message assistant">
               <span class="chat-avatar">✦</span>
-              <p>Vidim tvoje prihode, troškove i limite. Pitaj me koliko možeš uštedjeti ili gdje najviše trošiš.</p>
+              <p>Vidim tvoje stanje, prihode, troškove i raspodjelu. Reci mi „stanje računa je 850“ ili „odvoji 200 za hranu“, ili me pitaj koliko možeš uštedjeti.</p>
             </div>
           </div>
 
           <div class="quick-prompts" aria-label="Brza pitanja">
+            <button type="button" data-question="Koliko imam na računu?">Koliko imam?</button>
             <button type="button" data-question="Koliko mogu uštedjeti ovog mjeseca?">Koliko mogu uštedjeti?</button>
             <button type="button" data-question="Gdje najviše trošim?">Gdje najviše trošim?</button>
             <button type="button" data-question="Da li stižem do cilja?">Da li stižem do cilja?</button>
@@ -89,7 +94,7 @@
               <button class="active" type="button" data-period="month" role="tab" aria-selected="true">Mjesec</button>
             </div>
             <article class="balance-card">
-              <div class="balance-card-head"><p>Dostupno</p></div>
+              <div class="balance-card-head"><p>Bilans perioda</p><p class="balance-account" id="overviewAccount">Račun nije unesen</p></div>
               <h2 class="money private-value" id="balanceValue">0,00 €</h2>
               <p class="balance-context" id="balanceContext">0,00 € prihoda u periodu</p>
               <div class="budget-track" aria-label="Odnos potrošnje i prihoda"><span id="budgetProgress"></span></div>
@@ -100,7 +105,7 @@
             </article>
           </section>
           <section class="section-block" aria-labelledby="categoriesTitle">
-            <div class="section-heading"><h2 id="categoriesTitle">Potrošnja</h2><button class="text-button" id="openBudgetButton" type="button">Limiti</button></div>
+            <div class="section-heading"><h2 id="categoriesTitle">Potrošnja</h2><button class="text-button" id="openBudgetButton" type="button">Kategorije</button></div>
             <div class="category-list" id="categoryList"></div>
           </section>
         </section>
@@ -116,6 +121,11 @@
 
         <section class="app-page" id="planPage" data-page="plan" hidden>
           <header class="page-header"><p class="page-kicker">Budžet i ciljevi</p><h1>Plan</h1></header>
+          <section class="page-section" aria-labelledby="allocationTitle">
+            <div class="section-heading"><h2 id="allocationTitle">Raspodjela novca</h2><button class="text-button" id="openAllocationButton" type="button">Uredi</button></div>
+            <p class="allocation-summary" id="allocationSummary"></p>
+            <div class="category-list" id="allocationList"></div>
+          </section>
           <section class="page-section" aria-labelledby="goalTitle">
             <div class="section-heading"><h2 id="goalTitle">Cilj štednje</h2><button class="text-button" id="openGoalButton" type="button">Uredi</button></div>
             <article class="goal-card">
@@ -145,7 +155,6 @@
               <div class="ai-steps" id="aiSteps"></div>
             </div>
           </section>
-          <button class="secondary-action" id="planBudgetButton" type="button">Podesi mjesečne limite</button>
         </section>
       </main>
 
@@ -229,14 +238,42 @@
         <div class="sheet-grabber"></div>
         <div class="sheet-head">
           <div>
-            <p class="eyebrow">MJESEČNI OKVIR</p>
-            <h2>Limiti potrošnje</h2>
+            <p class="eyebrow">RASPODJELA NOVCA</p>
+            <h2>Kategorije i iznosi</h2>
           </div>
           <button class="close-button" value="cancel" type="submit" aria-label="Zatvori">×</button>
         </div>
-        <p class="sheet-intro">Postavi realan maksimum za svaku kategoriju. AI koristi ove limite kada računa moguću uštedu.</p>
+        <p class="sheet-intro">Upiši koliko novca mjesečno odvajaš za svaku kategoriju. Dodaj i svoje kategorije, a AI koristi ove iznose kada računa uštedu.</p>
+        <p class="sheet-summary" id="budgetSummary"></p>
         <div class="budget-fields" id="budgetFields"></div>
-        <button class="primary-button" type="submit" value="save">SAČUVAJ LIMITE <span>→</span></button>
+        <div class="add-category-row">
+          <input id="newCategoryInput" placeholder="Nova kategorija, npr. Teretana" maxlength="40" autocomplete="off" aria-label="Naziv nove kategorije" />
+          <button id="addCategoryButton" type="button">+ Dodaj</button>
+        </div>
+        <button class="primary-button" type="submit" value="save">SAČUVAJ RASPODJELU <span>→</span></button>
+      </form>
+    </dialog>
+
+    <dialog class="sheet" id="accountSheet">
+      <form method="dialog" class="sheet-card" id="accountForm">
+        <div class="sheet-grabber"></div>
+        <div class="sheet-head">
+          <div>
+            <p class="eyebrow">STANJE RAČUNA</p>
+            <h2>Koliko imaš na računu?</h2>
+          </div>
+          <button class="close-button" value="cancel" type="submit" aria-label="Zatvori">×</button>
+        </div>
+        <p class="sheet-intro">Unesi trenutno stanje. Od tog trenutka svaki novi prihod i trošak automatski mijenja stanje, a raniji unosi ga ne diraju.</p>
+        <label class="field amount-field">
+          <span>STANJE</span>
+          <span class="amount-input"><input id="accountBalanceInput" name="balance" inputmode="decimal" placeholder="0,00" required autocomplete="off" /><b>€</b></span>
+        </label>
+        <label class="field">
+          <span>STANJE NA DAN</span>
+          <input id="accountDateInput" type="date" name="date" required />
+        </label>
+        <button class="primary-button" type="submit" value="save">SAČUVAJ STANJE <span>→</span></button>
       </form>
     </dialog>
 
@@ -285,7 +322,7 @@
         </div>
         <p class="sheet-intro">Podaci ostaju na ovom uređaju. Sačuvaj backup fajl ako mijenjaš telefon ili browser.</p>
         <div class="data-actions">
-          <button id="exportDataButton" type="button"><span class="data-action-icon">↓</span><span><strong>IZVEZI BACKUP</strong><small>Transakcije, limiti i cilj u jednom fajlu</small></span><b>→</b></button>
+          <button id="exportDataButton" type="button"><span class="data-action-icon">↓</span><span><strong>IZVEZI BACKUP</strong><small>Transakcije, stanje, kategorije i cilj u jednom fajlu</small></span><b>→</b></button>
           <label for="importDataInput"><span class="data-action-icon">↑</span><span><strong>UVEZI BACKUP</strong><small>Vrati prethodno sačuvane podatke</small></span><b>→</b></label>
           <input id="importDataInput" type="file" accept="application/json,.json" hidden />
         </div>

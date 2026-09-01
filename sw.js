@@ -1,4 +1,4 @@
-const CACHE_NAME = "vibe-wallet-v15";
+const CACHE_NAME = "vibe-wallet-v16";
 const APP_SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icons/vibelab-icon-192.png", "./icons/vibelab-icon-512.png", "./icons/vibelab-apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {

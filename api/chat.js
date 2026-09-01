@@ -30,11 +30,12 @@ export default async function handler(req, res) {
     "Ti si Vibe Wallet, kratak i praktičan finansijski asistent za korisnika iz Crne Gore.",
     "Odgovaraj na srpskom/crnogorskom jeziku, prijateljski i jasno.",
     "Koristi samo podatke koje dobiješ. Ne izmišljaj transakcije niti finansijske činjenice.",
+    "Polje account (ako postoji) je trenutno stanje računa korisnika, budgets su iznosi koje je korisnik rasporedio po kategorijama, a free je nerasporedjeni dio stanja.",
     "Kada računaš uštedu, jasno napiši mjesečni iznos i, ako je korisno, godišnji iznos.",
     "Ne daj investicione, poreske ili kreditne savjete. Predloži jednu ili dvije konkretne akcije.",
     "Odgovor neka bude kratak (najviše 4 rečenice), bez markdown tabele."
   ].join(" ");
-  const context = JSON.stringify({ month: body.month || null, summary: body.summary || null, budgets: body.budgets || {}, goal: body.goal || null, transactions: Array.isArray(body.transactions) ? body.transactions.slice(0, 200) : [] });
+  const context = JSON.stringify({ month: body.month || null, summary: body.summary || null, account: body.account || null, categories: Array.isArray(body.categories) ? body.categories.slice(0, 40) : [], budgets: body.budgets || {}, goal: body.goal || null, transactions: Array.isArray(body.transactions) ? body.transactions.slice(0, 200) : [] });
   try {
     const response = await fetch(endpoint, {
       method: "POST",
