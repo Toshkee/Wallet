@@ -14,7 +14,7 @@ Zatim otvori `http://localhost:4173`.
 
 - AI početni ekran sa Gemini odgovorima i brzim pitanjima;
 - stanje računa: uneseš koliko imaš, a svaki novi prihod i trošak ga automatski mijenja;
-- sopstvene kategorije i raspodjela novca po kategorijama (i kroz chat: „odvoji 200 za hranu“);
+- kategorije su u potpunosti korisnikove (dodaj, ukloni, nema unaprijed zadatih limita) i novac se raspoređuje i prebacuje među njima (i kroz chat: „odvoji 200 za hranu“, „prebaci 50 iz hrane u prevoz“);
 - unos troškova i prihoda kroz formu, chat komandu ili glas;
 - glasovni diktat prvo popunjava chat polje, pa korisnik odlučuje kada šalje;
 - dnevni, nedjeljni i mjesečni pregled, sa kretanjem kroz ranije periode;

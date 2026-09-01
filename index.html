@@ -47,15 +47,19 @@
               <p class="home-summary-hint" id="homeBalanceHint">Unesi koliko trenutno imaš na računu.</p>
             </div>
             <div class="home-summary-grid">
-              <div><span>Potrošeno</span><strong class="private-value" id="homeSpent">0 €</strong></div>
-              <div><span>Moguća ušteda</span><strong class="private-value saving" id="homeSaving">0 €/mj.</strong></div>
+              <div><span>Potrošeno ovog mjeseca</span><strong class="private-value" id="homeSpent">0 €</strong></div>
+              <div><span>Slobodno (neraspoređeno)</span><strong class="private-value saving" id="homeFree">—</strong></div>
+            </div>
+            <div class="home-actions">
+              <button id="addIncomeButton" type="button">+ Uplata</button>
+              <button id="homeAllocateButton" type="button">Rasporedi po kategorijama</button>
             </div>
           </div>
 
           <div class="chat-thread" id="chatMessages" aria-live="polite">
             <div class="chat-message assistant">
               <span class="chat-avatar">✦</span>
-              <p>Vidim tvoje stanje, prihode, troškove i raspodjelu. Reci mi „stanje računa je 850“ ili „odvoji 200 za hranu“, ili me pitaj koliko možeš uštedjeti.</p>
+              <p>Ti biraš kategorije i raspoređuješ novac, ja zapisujem. Probaj: „stanje računa je 850“, „uplata 300“, „odvoji 200 za hranu“, „prebaci 50 iz hrane u prevoz“ ili „potrošio 12 za kafu“.</p>
             </div>
           </div>
 
@@ -225,6 +229,10 @@
             <input id="dateInput" type="date" name="date" required />
           </label>
         </div>
+        <label class="field" id="newCategoryField" hidden>
+          <span>NAZIV NOVE KATEGORIJE</span>
+          <input id="newCategoryInline" name="newCategory" placeholder="Npr. Teretana" maxlength="40" autocomplete="off" />
+        </label>
         <label class="field">
           <span>NAPOMENA</span>
           <input id="noteInput" name="note" placeholder="Npr. ručak sa ekipom" autocomplete="off" />
@@ -243,7 +251,7 @@
           </div>
           <button class="close-button" value="cancel" type="submit" aria-label="Zatvori">×</button>
         </div>
-        <p class="sheet-intro">Upiši koliko novca mjesečno odvajaš za svaku kategoriju. Dodaj i svoje kategorije, a AI koristi ove iznose kada računa uštedu.</p>
+        <p class="sheet-intro">Ovo su tvoje kategorije: dodaj koje hoćeš, ukloni koje ti ne trebaju (×) i upiši koliko novca odvajaš za svaku. Iznose mijenjaš kad god želiš.</p>
         <p class="sheet-summary" id="budgetSummary"></p>
         <div class="budget-fields" id="budgetFields"></div>
         <div class="add-category-row">

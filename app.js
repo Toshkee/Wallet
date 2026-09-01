@@ -40,6 +40,7 @@ const BUILT_IN_CATEGORIES = Object.keys(categoryMeta);
 const CUSTOM_CATEGORY_COLORS = ["#f9a66c", "#7fd1e8", "#b8e07a", "#e08ad6", "#ffd26f", "#8ed6b0", "#a9b4ff", "#f28c8c"];
 const MAX_CUSTOM_CATEGORIES = 24;
 const MAX_CATEGORY_NAME = 40;
+const NEW_CATEGORY_OPTION = "__new__";
 
 function clearLegacyDemoData() {
   if (localStorage.getItem(CLEAN_START_KEY)) return;
@@ -49,14 +50,16 @@ function clearLegacyDemoData() {
 
 clearLegacyDemoData();
 
+const loadedTransactions = loadTransactions();
+
 const state = {
   page: "ai",
   period: "month",
   anchorDate: localDate(),
   private: false,
   editingId: null,
-  customCategories: loadCustomCategories(),
-  transactions: loadTransactions(),
+  transactions: loadedTransactions,
+  categories: loadCategories(loadedTransactions),
   budgets: loadBudgets(),
   goal: loadGoal(),
   account: loadAccount(),
@@ -86,7 +89,9 @@ const elements = {
   newCategoryInput: document.querySelector("#newCategoryInput"),
   addCategoryButton: document.querySelector("#addCategoryButton"),
   homeSpent: document.querySelector("#homeSpent"),
-  homeSaving: document.querySelector("#homeSaving"),
+  homeFree: document.querySelector("#homeFree"),
+  newCategoryField: document.querySelector("#newCategoryField"),
+  newCategoryInline: document.querySelector("#newCategoryInline"),
   chatMessages: document.querySelector("#chatMessages"),
   aiVoiceButton: document.querySelector("#aiVoiceButton"),
   transactionSheet: document.querySelector("#transactionSheet"),
@@ -155,6 +160,32 @@ function round2(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+// Accepts "12,50", "12.50", "1.500", "1 500,00", "1,500.00" and "20 €".
+function parseAmount(raw) {
+  let text = String(raw ?? "").toLocaleLowerCase("sr").replace(/€|eura|eur|evra/g, "").replace(/\s/g, "");
+  if (!text) return NaN;
+  const negative = text.startsWith("-");
+  text = text.replace(/^[-+]/, "");
+  if (!/^\d[\d.,]*$/.test(text)) return NaN;
+  const lastComma = text.lastIndexOf(",");
+  const lastDot = text.lastIndexOf(".");
+  let normalized;
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimal = lastComma > lastDot ? "," : ".";
+    normalized = text.replace(new RegExp(`\\${decimal === "," ? "." : ","}`, "g"), "").replace(decimal, ".");
+  } else if (lastComma >= 0) {
+    normalized = (text.match(/,/g) || []).length > 1 ? text.replace(/,/g, "") : text.replace(",", ".");
+  } else if (lastDot >= 0) {
+    const dots = (text.match(/\./g) || []).length;
+    const thousands = dots > 1 || /^\d{1,3}\.\d{3}$/.test(text);
+    normalized = thousands ? text.replace(/\./g, "") : text;
+  } else {
+    normalized = text;
+  }
+  const value = Number(normalized);
+  return Number.isFinite(value) ? (negative ? -value : value) : NaN;
+}
+
 function loadTransactions() {
   const saved = readStorage(STORAGE_KEY);
   if (Array.isArray(saved)) return saved.map(normalizeTransaction).filter(Boolean);
@@ -167,8 +198,8 @@ function saveTransactions() {
 
 function loadBudgets() {
   const saved = readStorage(BUDGET_KEY);
-  if (saved && typeof saved === "object" && !Array.isArray(saved)) return normalizeBudgets(saved);
-  return { ...DEFAULT_BUDGETS };
+  if (saved && typeof saved === "object" && !Array.isArray(saved) && !isUntouchedDefaultBudgets(saved)) return normalizeBudgets(saved);
+  return {};
 }
 
 function normalizeCategoryName(value) {
@@ -176,43 +207,66 @@ function normalizeCategoryName(value) {
   return value.replace(/\s+/g, " ").trim().slice(0, MAX_CATEGORY_NAME);
 }
 
-function normalizeCustomCategories(input) {
+function colorForIndex(index) {
+  return CUSTOM_CATEGORY_COLORS[index % CUSTOM_CATEGORY_COLORS.length];
+}
+
+function normalizeCategoryList(input) {
   if (!Array.isArray(input)) return [];
-  const seen = new Set(BUILT_IN_CATEGORIES.map((name) => name.toLocaleLowerCase("sr")));
+  const seen = new Set();
   const result = [];
-  input.forEach((item, index) => {
-    const name = normalizeCategoryName(item?.name);
+  input.forEach((item) => {
+    const name = normalizeCategoryName(typeof item === "string" ? item : item?.name);
     const key = name.toLocaleLowerCase("sr");
-    if (!name || seen.has(key) || result.length >= MAX_CUSTOM_CATEGORIES) return;
+    if (!name || seen.has(key) || result.length >= MAX_CUSTOM_CATEGORIES + BUILT_IN_CATEGORIES.length) return;
     seen.add(key);
-    const color = typeof item.color === "string" && /^#[0-9a-f]{6}$/i.test(item.color) ? item.color : CUSTOM_CATEGORY_COLORS[index % CUSTOM_CATEGORY_COLORS.length];
-    result.push({ name, color });
+    const stored = typeof item?.color === "string" && /^#[0-9a-f]{6}$/i.test(item.color) ? item.color : "";
+    result.push({ name, color: stored || categoryMeta[name]?.color || colorForIndex(result.length) });
   });
   return result;
 }
 
-function loadCustomCategories() {
-  return normalizeCustomCategories(readStorage(CATEGORIES_KEY));
+function withFallbackCategory(list) {
+  const withoutFallback = list.filter((item) => item.name !== "Ostalo");
+  return [...withoutFallback, { name: "Ostalo", color: categoryMeta.Ostalo.color }];
 }
 
-function saveCustomCategories() {
-  localStorage.setItem(CATEGORIES_KEY, JSON.stringify(state.customCategories));
+// The category list belongs to the user: it starts from what their entries already use and they add/remove freely.
+function loadCategories(transactions) {
+  const saved = readStorage(CATEGORIES_KEY);
+  if (saved && typeof saved === "object" && !Array.isArray(saved) && Array.isArray(saved.items)) {
+    return withFallbackCategory(normalizeCategoryList(saved.items));
+  }
+  const legacyCustom = Array.isArray(saved) ? normalizeCategoryList(saved) : [];
+  const used = [...new Set(transactions.map((item) => item.category))];
+  const seeded = normalizeCategoryList([
+    ...BUILT_IN_CATEGORIES.filter((name) => used.includes(name)),
+    ...legacyCustom,
+    ...used,
+  ]);
+  const list = withFallbackCategory(seeded);
+  try { localStorage.setItem(CATEGORIES_KEY, JSON.stringify({ version: 2, items: list })); } catch {}
+  return list;
+}
+
+function saveCategories() {
+  localStorage.setItem(CATEGORIES_KEY, JSON.stringify({ version: 2, items: state.categories }));
 }
 
 function allCategoryNames() {
-  const custom = state.customCategories.map((item) => item.name);
-  return [...BUILT_IN_CATEGORIES.filter((name) => name !== "Plata" && name !== "Ostalo"), ...custom, "Plata", "Ostalo"];
+  return state.categories.map((item) => item.name);
 }
 
 function allocatableCategories() {
-  return allCategoryNames().filter((name) => name !== "Plata");
+  return allCategoryNames();
 }
 
 function categoryInfo(name) {
-  if (categoryMeta[name]) return categoryMeta[name];
-  const custom = state.customCategories.find((item) => item.name === name);
-  if (custom) return { icon: custom.name.charAt(0).toLocaleUpperCase("sr"), color: custom.color };
-  return categoryMeta.Ostalo;
+  const stored = state.categories.find((item) => item.name === name);
+  const builtIn = categoryMeta[name];
+  if (builtIn) return { icon: builtIn.icon, color: stored?.color || builtIn.color };
+  if (stored) return { icon: stored.name.charAt(0).toLocaleUpperCase("sr"), color: stored.color };
+  return { icon: name ? name.charAt(0).toLocaleUpperCase("sr") : categoryMeta.Ostalo.icon, color: categoryMeta.Ostalo.color };
 }
 
 function categoryStem(name) {
@@ -222,10 +276,16 @@ function categoryStem(name) {
 
 // Matches a category mentioned in free text, tolerating Serbian case endings ("hranu", "teretanu", "račune").
 function matchCategoryInText(text) {
+  return matchCategoriesInText(text)[0]?.name || "";
+}
+
+function matchCategoriesInText(text) {
   const normalized = text.toLocaleLowerCase("sr");
   return allCategoryNames()
-    .filter((name) => normalized.includes(categoryStem(name)))
-    .sort((a, b) => b.length - a.length)[0] || "";
+    .map((name) => ({ name, index: normalized.indexOf(categoryStem(name)) }))
+    .filter((item) => item.index >= 0)
+    .sort((a, b) => a.index - b.index || b.name.length - a.name.length)
+    .filter((item, position, list) => !list.slice(0, position).some((other) => Math.abs(other.index - item.index) < 2));
 }
 
 function findCategoryByName(value) {
@@ -233,36 +293,59 @@ function findCategoryByName(value) {
   return allCategoryNames().find((name) => name.toLocaleLowerCase("sr") === key) || "";
 }
 
-function addCustomCategory(rawName) {
+function addCategory(rawName) {
   const name = normalizeCategoryName(rawName);
   if (!name) return { error: "Upiši naziv kategorije." };
   const existing = findCategoryByName(name);
   if (existing) return { error: `Kategorija „${existing}“ već postoji.` };
-  if (state.customCategories.length >= MAX_CUSTOM_CATEGORIES) return { error: `Najviše ${MAX_CUSTOM_CATEGORIES} sopstvenih kategorija.` };
-  const color = CUSTOM_CATEGORY_COLORS[state.customCategories.length % CUSTOM_CATEGORY_COLORS.length];
-  state.customCategories.push({ name, color });
-  saveCustomCategories();
+  if (state.categories.length >= MAX_CUSTOM_CATEGORIES + BUILT_IN_CATEGORIES.length) return { error: "Dostigao si najveći broj kategorija." };
+  const color = categoryMeta[name]?.color || colorForIndex(state.categories.length);
+  state.categories = withFallbackCategory([...state.categories, { name, color }]);
+  saveCategories();
   renderCategoryOptions();
   return { name };
 }
 
-function removeCustomCategory(name) {
-  if (!state.customCategories.some((item) => item.name === name)) return;
-  state.customCategories = state.customCategories.filter((item) => item.name !== name);
+function removeCategory(name) {
+  if (name === "Ostalo" || !state.categories.some((item) => item.name === name)) return;
+  state.categories = withFallbackCategory(state.categories.filter((item) => item.name !== name));
   state.transactions = state.transactions.map((item) => item.category === name ? { ...item, category: "Ostalo" } : item);
   delete state.budgets[name];
-  saveCustomCategories();
+  saveCategories();
   saveTransactions();
   saveBudgets();
   renderCategoryOptions();
 }
 
+function moveAllocation(from, to, amount) {
+  const value = round2(amount);
+  if (!Number.isFinite(value) || value <= 0) return { error: "Upiši iznos koji želiš prebaciti." };
+  if (from) {
+    const available = Number(state.budgets[from] || 0);
+    if (available < value) return { error: `U kategoriji ${from} je odvojeno samo ${formatMoney(available)}.` };
+    state.budgets[from] = round2(available - value);
+  }
+  if (to) state.budgets[to] = round2(Number(state.budgets[to] || 0) + value);
+  saveBudgets();
+  return { from, to, amount: value };
+}
+
 function renderCategoryOptions(selected = "") {
   const current = selected || elements.categoryInput.value;
   const names = allCategoryNames();
-  if (current && !names.includes(current)) names.splice(names.length - 1, 0, current);
-  elements.categoryInput.innerHTML = names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
-  if (current && names.includes(current)) elements.categoryInput.value = current;
+  if (current && current !== NEW_CATEGORY_OPTION && !names.includes(current)) names.splice(names.length - 1, 0, current);
+  elements.categoryInput.innerHTML = [
+    ...names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`),
+    `<option value="${NEW_CATEGORY_OPTION}">+ Nova kategorija…</option>`,
+  ].join("");
+  elements.categoryInput.value = names.includes(current) ? current : names[0];
+  toggleNewCategoryField();
+}
+
+function toggleNewCategoryField() {
+  const wantsNew = elements.categoryInput.value === NEW_CATEGORY_OPTION;
+  elements.newCategoryField.hidden = !wantsNew;
+  if (wantsNew) window.setTimeout(() => elements.newCategoryInline.focus(), 50);
 }
 
 function saveBudgets() {
@@ -296,16 +379,21 @@ function normalizeTransaction(item) {
 
 function normalizeBudgets(input) {
   const result = {};
-  Object.keys(DEFAULT_BUDGETS).forEach((category) => { result[category] = DEFAULT_BUDGETS[category]; });
   if (input && typeof input === "object") {
     Object.entries(input).forEach(([rawName, rawValue]) => {
       const name = normalizeCategoryName(rawName);
       const value = Number(rawValue);
-      if (!name || name === "Plata" || !Number.isFinite(value) || value < 0) return;
+      if (!name || !Number.isFinite(value) || value < 0) return;
       result[name] = round2(value);
     });
   }
   return result;
+}
+
+// Older versions pre-filled limits the user never chose; drop them if they are still untouched.
+function isUntouchedDefaultBudgets(input) {
+  const keys = Object.keys(input || {});
+  return keys.length === Object.keys(DEFAULT_BUDGETS).length && keys.every((key) => Number(input[key]) === DEFAULT_BUDGETS[key]);
 }
 
 function defaultAccount() {
@@ -505,8 +593,12 @@ function renderAccount(currentMonthSummary) {
     elements.homeBalance.textContent = "—";
     elements.homeBalanceHint.textContent = "Unesi koliko trenutno imaš na računu. Svaki novi unos poslije toga automatski mijenja stanje.";
     elements.overviewAccount.textContent = "Račun nije unesen";
+    elements.homeFree.textContent = "—";
     return;
   }
+  const allocation = allocationTotals();
+  elements.homeFree.textContent = formatMoney(allocation.free, true);
+  elements.homeFree.classList.toggle("over", allocation.free < 0);
   const since = new Intl.DateTimeFormat("sr-Latn-ME", { day: "numeric", month: "short" }).format(new Date(`${state.account.date}T12:00:00`));
   elements.homeBalanceLabel.textContent = "Stanje računa";
   elements.homeBalance.textContent = formatMoney(balance);
@@ -579,10 +671,20 @@ function renderCategories(transactions, totalExpense) {
   }).join("");
 }
 
-function monthlyRestaurantSpend() {
+function monthlyCategorySpend(category) {
   return state.transactions
-    .filter((item) => item.type === "expense" && item.category === "Restorani" && inCurrentPeriod(item, "month", localDate()))
+    .filter((item) => item.type === "expense" && item.category === category && inCurrentPeriod(item, "month", localDate()))
     .reduce((sum, item) => sum + Number(item.amount), 0);
+}
+
+// The category that is furthest over what the user set aside for it this month.
+function overspendInsight() {
+  const rows = allocatableCategories()
+    .map((name) => ({ name, limit: Number(state.budgets[name] || 0), spent: monthlyCategorySpend(name) }))
+    .filter((row) => row.limit > 0)
+    .map((row) => ({ ...row, saving: Math.max(0, row.spent - row.limit) }))
+    .sort((a, b) => b.saving - a.saving);
+  return rows[0] || { name: "", limit: 0, spent: 0, saving: 0 };
 }
 
 function goalMetrics() {
@@ -621,34 +723,35 @@ function renderGoal() {
 }
 
 function renderAiInsight() {
-  const restaurantSpend = monthlyRestaurantSpend();
-  const restaurantLimit = Number(state.budgets.Restorani || 120);
-  const saving = Math.max(0, restaurantSpend - restaurantLimit);
-  const yearly = saving * 12;
+  const insight = overspendInsight();
+  const saving = insight.saving;
   if (saving > 0) {
-    elements.aiInsight.textContent = `Restorani su ${formatMoney(saving, true)} iznad limita od ${formatMoney(restaurantLimit, true)}.`;
+    elements.aiInsight.textContent = `${insight.name} je ${formatMoney(saving, true)} iznad odvojenih ${formatMoney(insight.limit, true)}.`;
+  } else if (insight.name) {
+    elements.aiInsight.textContent = "Potrošnja je u okviru iznosa koje si odvojio.";
   } else {
-    elements.aiInsight.textContent = "Potrošnja je trenutno u okviru tvojih limita.";
+    elements.aiInsight.textContent = "Odvoji novac po kategorijama na ekranu Plan da pratim gdje prelaziš.";
   }
   elements.monthlySaving.textContent = formatMoney(saving, true);
-  elements.yearlySaving.textContent = formatMoney(yearly, true);
-  elements.homeSaving.textContent = `${formatMoney(saving, true)}/mj.`;
+  elements.yearlySaving.textContent = formatMoney(saving * 12, true);
 }
 
 function buildAiPlan(customAnswer = "") {
-  const spend = monthlyRestaurantSpend();
-  const restaurantLimit = Number(state.budgets.Restorani || 120);
-  const saving = Math.max(0, spend - restaurantLimit);
+  const insight = overspendInsight();
+  const saving = insight.saving;
   const annual = saving * 12;
   const summary = totals(state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate())));
   const goal = goalMetrics();
+  const allocation = allocationTotals();
   elements.aiPlanMessage.textContent = customAnswer || (saving
-    ? `Najlakša prilika je kategorija Restorani. Sa limita od ${formatMoney(restaurantLimit, true)} zadržavaš isti stil života, a oslobađaš oko ${formatMoney(saving, true)} mjesečno i ${formatMoney(annual, true)} godišnje.`
-    : `Trenutno si u okviru predloženog limita za restorane. Sljedeći plan mogu napraviti kada dodamo još tvojih stvarnih troškova.`);
+    ? `Najlakša prilika je kategorija ${insight.name}. Ako ostaneš na odvojenih ${formatMoney(insight.limit, true)}, oslobađaš oko ${formatMoney(saving, true)} mjesečno i ${formatMoney(annual, true)} godišnje.`
+    : insight.name
+      ? "Trenutno si u okviru iznosa koje si odvojio. Sljedeći plan mogu napraviti kada dodamo još tvojih stvarnih troškova."
+      : "Odvoji novac po kategorijama pa ću ti reći gdje najlakše štediš.");
   elements.aiSteps.innerHTML = `
-    <div class="ai-step"><span class="ai-step-index">01</span><div><strong>Limit za restorane</strong><small>Prati se automatski svakog mjeseca</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit, true)}</span></div>
-    <div class="ai-step"><span class="ai-step-index">02</span><div><strong>Nedjeljni okvir</strong><small>Podijeljeno na četiri realne cjeline</small></div><span class="ai-step-amount">${formatMoney(restaurantLimit / 4, true)}</span></div>
-    <div class="ai-step"><span class="ai-step-index">03</span><div><strong>Trenutno preostalo</strong><small>Prihodi minus evidentirani troškovi</small></div><span class="ai-step-amount">${formatMoney(summary.income - summary.expense, true)}</span></div>
+    <div class="ai-step"><span class="ai-step-index">01</span><div><strong>${escapeHtml(insight.name ? `Odvojeno za ${insight.name}` : "Raspodjela")}</strong><small>${insight.name ? "Prati se automatski svakog mjeseca" : "Još ništa nije odvojeno"}</small></div><span class="ai-step-amount">${insight.name ? formatMoney(insight.limit, true) : "—"}</span></div>
+    <div class="ai-step"><span class="ai-step-index">02</span><div><strong>Slobodno na računu</strong><small>Stanje minus sve što je odvojeno</small></div><span class="ai-step-amount">${allocation.free === null ? "—" : formatMoney(allocation.free, true)}</span></div>
+    <div class="ai-step"><span class="ai-step-index">03</span><div><strong>Bilans mjeseca</strong><small>Prihodi minus evidentirani troškovi</small></div><span class="ai-step-amount">${formatMoney(summary.income - summary.expense, true)}</span></div>
     <div class="ai-step"><span class="ai-step-index">04</span><div><strong>${escapeHtml(state.goal.name || "Cilj štednje")}</strong><small>Potrebno mjesečno do izabranog roka</small></div><span class="ai-step-amount">${goal.monthly ? `${formatMoney(goal.monthly, true)}/mj.` : "—"}</span></div>
   `;
 }
@@ -669,8 +772,8 @@ function handleGoalSubmit(event) {
     return;
   }
   const data = new FormData(elements.goalForm);
-  const target = Number(String(data.get("target")).replace(",", "."));
-  const saved = Number(String(data.get("saved")).replace(",", "."));
+  const target = parseAmount(data.get("target"));
+  const saved = parseAmount(data.get("saved"));
   if (!Number.isFinite(target) || target <= 0 || !Number.isFinite(saved) || saved < 0) {
     showToast("Provjeri iznose cilja i dosadašnje štednje.");
     return;
@@ -699,24 +802,24 @@ function budgetInputName(category) {
 function draftBudgetsFromForm() {
   const draft = {};
   elements.budgetFields.querySelectorAll("input[data-category]").forEach((input) => {
-    const value = Number(String(input.value || "0").replace(",", "."));
+    const value = input.value.trim() ? parseAmount(input.value) : 0;
     draft[input.dataset.category] = Number.isFinite(value) && value >= 0 ? round2(value) : 0;
   });
   return draft;
 }
 
 function renderBudgetFields(draft = state.budgets) {
-  const customNames = new Set(state.customCategories.map((item) => item.name));
   elements.budgetFields.innerHTML = allocatableCategories().map((category) => {
     const meta = categoryInfo(category);
-    const isCustom = customNames.has(category);
+    const removable = category !== "Ostalo";
     const value = Number(draft[category] || 0);
+    const spent = monthlyCategorySpend(category);
     return `
-      <div class="budget-field ${isCustom ? "custom" : ""}">
+      <div class="budget-field ${removable ? "custom" : ""}">
         <span class="category-icon" style="color:${meta.color}">${meta.icon}</span>
-        <label for="budget-${escapeHtml(category)}">${escapeHtml(category)}<small>${isCustom ? "Tvoja kategorija" : "Mjesečni iznos"}</small></label>
+        <label for="budget-${escapeHtml(category)}">${escapeHtml(category)}<small>${spent ? `Potrošeno ${formatMoney(spent)} ovog mjeseca` : "Koliko odvajaš"}</small></label>
         <span class="budget-input"><input id="budget-${escapeHtml(category)}" name="${escapeHtml(budgetInputName(category))}" data-category="${escapeHtml(category)}" inputmode="decimal" value="${value ? String(value).replace(".", ",") : ""}" placeholder="0" aria-label="Iznos za ${escapeHtml(category)}" /><span>€</span></span>
-        ${isCustom ? `<button class="remove-category" type="button" data-remove-category="${escapeHtml(category)}" aria-label="Ukloni kategoriju ${escapeHtml(category)}">×</button>` : ""}
+        ${removable ? `<button class="remove-category" type="button" data-remove-category="${escapeHtml(category)}" aria-label="Ukloni kategoriju ${escapeHtml(category)}">×</button>` : ""}
       </div>
     `;
   }).join("");
@@ -738,7 +841,7 @@ function openBudgetSheet() {
 
 function handleAddCategory() {
   const draft = draftBudgetsFromForm();
-  const result = addCustomCategory(elements.newCategoryInput.value);
+  const result = addCategory(elements.newCategoryInput.value);
   if (result.error) {
     showToast(result.error);
     elements.newCategoryInput.focus();
@@ -757,7 +860,7 @@ function handleRemoveCategory(name) {
   if (!window.confirm(`Ukloniti kategoriju „${name}“?${detail}`)) return;
   const draft = draftBudgetsFromForm();
   delete draft[name];
-  removeCustomCategory(name);
+  removeCategory(name);
   renderBudgetFields(draft);
   renderDashboard();
   showToast(`Kategorija „${name}“ je uklonjena.`);
@@ -769,11 +872,7 @@ function handleBudgetSubmit(event) {
     elements.budgetSheet.close();
     return;
   }
-  const draft = draftBudgetsFromForm();
-  state.budgets = normalizeBudgets({ ...state.budgets, ...draft });
-  Object.keys(state.budgets).forEach((name) => {
-    if (!(name in draft) && !(name in DEFAULT_BUDGETS)) delete state.budgets[name];
-  });
+  state.budgets = normalizeBudgets(draftBudgetsFromForm());
   saveBudgets();
   elements.budgetSheet.close();
   renderDashboard();
@@ -796,7 +895,7 @@ function handleAccountSubmit(event) {
     return;
   }
   const data = new FormData(elements.accountForm);
-  const balance = Number(String(data.get("balance") || "").replace(/\s/g, "").replace(",", "."));
+  const balance = parseAmount(data.get("balance"));
   const date = String(data.get("date") || localDate());
   if (!Number.isFinite(balance)) {
     showToast("Unesi ispravan iznos stanja.");
@@ -861,7 +960,7 @@ function downloadBackup() {
     budgets: state.budgets,
     goal: state.goal,
     account: state.account.isSet ? state.account : null,
-    categories: state.customCategories,
+    categories: state.categories,
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -887,12 +986,16 @@ async function importBackup(event) {
     const importedGoal = backup.goal ? normalizeGoal(backup.goal) : defaultGoal();
     if (![1, 2].includes(backup.version) || !validTransactions || importedTransactions.length !== backup.transactions.length || !validBudgets || (backup.goal && !importedGoal.target)) throw new Error("Neispravan format");
     if (!window.confirm(`Uvesti ${backup.transactions.length} transakcija? Trenutni lokalni podaci biće zamijenjeni.`)) return;
-    state.customCategories = normalizeCustomCategories(backup.categories);
     state.transactions = importedTransactions;
+    state.categories = withFallbackCategory(normalizeCategoryList([
+      ...(Array.isArray(backup.categories) ? backup.categories : []),
+      ...(backup.version === 1 ? BUILT_IN_CATEGORIES : []),
+      ...new Set(importedTransactions.map((item) => item.category)),
+    ]));
     state.budgets = normalizeBudgets(backup.budgets);
     state.goal = importedGoal;
     state.account = normalizeAccount(backup.account);
-    saveCustomCategories();
+    saveCategories();
     saveTransactions();
     saveBudgets();
     saveGoal();
@@ -909,8 +1012,10 @@ async function importBackup(event) {
   }
 }
 
-function openTransactionSheet(transaction = null) {
+function openTransactionSheet(transaction = null, presetType = "") {
   elements.transactionForm.reset();
+  elements.newCategoryInline.value = "";
+  if (presetType) document.querySelector(`input[name="type"][value="${presetType}"]`).checked = true;
   state.editingId = transaction?.id || null;
   elements.transactionFormEyebrow.textContent = transaction ? "UREĐIVANJE" : "NOVI UNOS";
   elements.transactionFormTitle.textContent = transaction ? "Uredi transakciju" : "Dodaj transakciju";
@@ -934,18 +1039,29 @@ function handleTransactionSubmit(event) {
     return;
   }
   const formData = new FormData(elements.transactionForm);
-  const amount = Number(String(formData.get("amount")).replace(",", "."));
+  const amount = parseAmount(formData.get("amount"));
   if (!Number.isFinite(amount) || amount <= 0) {
     showToast("Unesi ispravan iznos.");
     elements.amountInput.focus();
     return;
+  }
+  let category = String(formData.get("category") || "");
+  if (category === NEW_CATEGORY_OPTION) {
+    const added = addCategory(elements.newCategoryInline.value);
+    if (added.error) {
+      showToast(added.error);
+      elements.newCategoryInline.focus();
+      return;
+    }
+    category = added.name;
+    renderCategoryOptions(category);
   }
   const existing = state.editingId ? state.transactions.find((item) => item.id === state.editingId) : null;
   const nextTransaction = normalizeTransaction({
     id: state.editingId || crypto.randomUUID(),
     type: formData.get("type"),
     amount,
-    category: formData.get("category"),
+    category,
     date: formData.get("date"),
     note: String(formData.get("note") || "").trim(),
     createdAt: existing ? existing.createdAt : new Date().toISOString(),
@@ -970,8 +1086,8 @@ function handleTransactionSubmit(event) {
 
 function parseVoiceInput(transcript) {
   const normalized = transcript.toLocaleLowerCase("sr").replaceAll("evra", "eura");
-  const amountMatch = normalized.match(/(\d+(?:[.,]\d{1,2})?)/);
-  const incomeWords = ["primio", "primila", "zaradio", "zaradila", "plata", "prihod"];
+  const amountMatch = normalized.match(/(\d[\d.,]*)/);
+  const incomeWords = ["primio", "primila", "zaradio", "zaradila", "plata", "prihod", "uplat", "sjelo", "leglo"];
   const type = incomeWords.some((word) => normalized.includes(word)) ? "income" : "expense";
   const categoryMatchers = [
     ["gorivo", "taksi", "prevoz", "autobus"],
@@ -983,20 +1099,53 @@ function parseVoiceInput(transcript) {
   ];
   const categories = ["Prevoz", "Restorani", "Hrana", "Računi", "Plata", "Kupovina"];
   const matchIndex = categoryMatchers.findIndex((keywords) => keywords.some((word) => normalized.includes(word)));
-  const customMatch = state.customCategories.find((item) => normalized.includes(categoryStem(item.name)));
+  const mentioned = matchCategoryInText(transcript);
+  const keywordCategory = matchIndex >= 0 && allCategoryNames().includes(categories[matchIndex]) ? categories[matchIndex] : "";
+  const incomeCategory = allCategoryNames().includes("Plata") ? "Plata" : "Ostalo";
+  const parsedAmount = amountMatch ? parseAmount(amountMatch[1]) : NaN;
   return {
-    amount: amountMatch ? amountMatch[1].replace(".", ",") : "",
+    amount: Number.isFinite(parsedAmount) ? String(parsedAmount).replace(".", ",") : "",
     type,
-    category: customMatch ? customMatch.name : matchIndex >= 0 ? categories[matchIndex] : type === "income" ? "Plata" : "Ostalo",
+    category: mentioned || keywordCategory || (type === "income" ? incomeCategory : "Ostalo"),
     note: transcript.charAt(0).toUpperCase() + transcript.slice(1),
   };
 }
 
 function amountFromText(text) {
-  const match = text.toLocaleLowerCase("sr").match(/(-?\d+(?:[.,]\d{1,2})?)/);
+  const match = text.toLocaleLowerCase("sr").match(/(-?\d[\d.,]*)/);
   if (!match) return null;
-  const amount = Number(match[1].replace(",", "."));
+  const amount = parseAmount(match[1]);
   return Number.isFinite(amount) ? amount : null;
+}
+
+function isMoveCommand(text) {
+  const normalized = text.toLocaleLowerCase("sr");
+  return ["prebaci", "premjesti", "premesti", "prenesi", "pomjeri", "pomeri", "vrati"].some((word) => normalized.includes(word));
+}
+
+// "prebaci 50 iz hrane u prevoz", "vrati 20 iz zabave" (back to free money), "prebaci 30 u hranu" (from free money).
+function moveFromChat(text) {
+  if (!isMoveCommand(text)) return null;
+  const amount = amountFromText(text);
+  if (amount === null || amount <= 0) return { needsAmount: true };
+  const normalized = text.toLocaleLowerCase("sr");
+  const mentioned = matchCategoriesInText(text);
+  let from = null;
+  let to = null;
+  if (mentioned.length >= 2) {
+    [from, to] = [mentioned[0].name, mentioned[1].name];
+  } else if (mentioned.length === 1) {
+    const before = normalized.slice(0, mentioned[0].index);
+    const fromWords = /(\b(iz|sa|s)\s*$)/.test(before) || normalized.includes("vrati");
+    if (fromWords) from = mentioned[0].name;
+    else to = mentioned[0].name;
+  } else {
+    return { needsCategory: true };
+  }
+  const result = moveAllocation(from, to, amount);
+  if (result.error) return { error: result.error };
+  renderDashboard();
+  return result;
 }
 
 function isBalanceCommand(text) {
@@ -1022,10 +1171,8 @@ function allocateFromChat(text) {
   if (!isAllocationCommand(text)) return null;
   const amount = amountFromText(text);
   if (amount === null || amount < 0) return { needsAmount: true };
-  const parsed = parseVoiceInput(text);
-  const mentioned = matchCategoryInText(text);
-  const category = mentioned || (parsed.category === "Ostalo" || parsed.category === "Plata" ? "" : parsed.category);
-  if (!category || category === "Plata") return { needsCategory: true };
+  const category = matchCategoryInText(text);
+  if (!category) return { needsCategory: true };
   state.budgets[category] = round2(amount);
   saveBudgets();
   renderDashboard();
@@ -1034,7 +1181,7 @@ function allocateFromChat(text) {
 
 function isTransactionCommand(text) {
   const normalized = text.toLocaleLowerCase("sr");
-  return ["dodaj", "unesi", "upiši", "upisi", "stavi", "evidentiraj", "zabilježi", "zabiljezi", "zapiši", "zapisi"]
+  return ["dodaj", "unesi", "upiši", "upisi", "stavi", "evidentiraj", "zabilježi", "zabiljezi", "zapiši", "zapisi", "uplati", "uplata", "potrošio", "potrosio", "platio", "kupio"]
     .some((word) => normalized.includes(word));
 }
 
@@ -1051,7 +1198,7 @@ function transactionDateFromText(text) {
 function addTransactionFromChat(text) {
   if (!isTransactionCommand(text)) return { transaction: null, needsAmount: false };
   const parsed = parseVoiceInput(text);
-  const amount = Number(String(parsed.amount).replace(",", "."));
+  const amount = parseAmount(parsed.amount);
   if (!Number.isFinite(amount) || amount <= 0) return { transaction: null, needsAmount: true };
   const transaction = normalizeTransaction({
     id: crypto.randomUUID(),
@@ -1187,6 +1334,22 @@ async function answerAiQuestion(questionOverride = "") {
     finishAiReply();
     return;
   }
+  const moveCommand = moveFromChat(originalQuestion);
+  if (moveCommand) {
+    let reply;
+    if (moveCommand.needsAmount) reply = "Napiši iznos, na primjer: „Prebaci 50 € iz hrane u prevoz“.";
+    else if (moveCommand.needsCategory) reply = `Iz koje u koju kategoriju? Imaš: ${allocatableCategories().join(", ")}.`;
+    else if (moveCommand.error) reply = moveCommand.error;
+    else {
+      const fromLabel = moveCommand.from ? `iz ${moveCommand.from}` : "iz slobodnog novca";
+      const toLabel = moveCommand.to ? `u ${moveCommand.to}` : "u slobodan novac";
+      reply = `Prebacio sam ${formatMoney(moveCommand.amount)} ${fromLabel} ${toLabel}. ${allocationSummaryText()}.`;
+      buildAiPlan(reply);
+    }
+    await appendTypedAssistantMessage(reply);
+    finishAiReply();
+    return;
+  }
   const allocationCommand = allocateFromChat(originalQuestion);
   if (allocationCommand) {
     let reply;
@@ -1216,9 +1379,9 @@ async function answerAiQuestion(questionOverride = "") {
   }
   const monthTransactions = state.transactions.filter((item) => inCurrentPeriod(item, "month", localDate()));
   const summary = totals(monthTransactions);
-  const restaurants = monthlyRestaurantSpend();
-  const restaurantLimit = Number(state.budgets.Restorani || 120);
-  const saving = Math.max(0, restaurants - restaurantLimit);
+  const insight = overspendInsight();
+  const saving = insight.saving;
+  const askedCategory = matchCategoryInText(originalQuestion);
   const goal = goalMetrics();
   const categories = monthTransactions
     .filter((item) => item.type === "expense")
@@ -1228,10 +1391,16 @@ async function answerAiQuestion(questionOverride = "") {
     }, {});
   const topCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0];
   let answer;
-  if (question.includes("restoran") || question.includes("ručak") || question.includes("rucak")) {
-    answer = `Na restorane si ovog mjeseca potrošio ${formatMoney(restaurants)}. Tvoj limit je ${formatMoney(restaurantLimit)}, pa je moguća mjesečna ušteda ${formatMoney(saving)}.`;
+  if (askedCategory && (question.includes("koliko") || question.includes("potroš") || question.includes("potros") || question.includes("ostalo"))) {
+    const spent = monthlyCategorySpend(askedCategory);
+    const limit = Number(state.budgets[askedCategory] || 0);
+    answer = limit
+      ? `Za ${askedCategory} si ovog mjeseca potrošio ${formatMoney(spent)} od odvojenih ${formatMoney(limit)}. Ostalo ti je ${formatMoney(limit - spent)}.`
+      : `Za ${askedCategory} si ovog mjeseca potrošio ${formatMoney(spent)}. Nijesi odvojio iznos za tu kategoriju.`;
   } else if (question.includes("ušted") || question.includes("usted")) {
-    answer = `Prema trenutnim unosima, samo smanjenjem restorana možeš sačuvati ${formatMoney(saving)} mjesečno, odnosno ${formatMoney(saving * 12)} godišnje.`;
+    answer = saving
+      ? `Prema trenutnim unosima, ako ${insight.name} vratiš na odvojenih ${formatMoney(insight.limit)}, štediš ${formatMoney(saving)} mjesečno, odnosno ${formatMoney(saving * 12)} godišnje.`
+      : "Trenutno si u okviru iznosa koje si odvojio. Odvoji novac po kategorijama pa ću ti pokazati gdje najlakše štediš.";
   } else if (question.includes("ostalo") || question.includes("preostalo") || question.includes("imam")) {
     const currentBalance = accountBalance();
     answer = currentBalance === null
@@ -1504,6 +1673,9 @@ elements.newCategoryInput.addEventListener("keydown", (event) => {
   }
 });
 document.querySelector("#openAccountButton").addEventListener("click", openAccountSheet);
+document.querySelector("#addIncomeButton").addEventListener("click", () => openTransactionSheet(null, "income"));
+document.querySelector("#homeAllocateButton").addEventListener("click", openBudgetSheet);
+elements.categoryInput.addEventListener("change", toggleNewCategoryField);
 document.querySelector("#homeBalanceCard").addEventListener("click", (event) => {
   if (!event.target.closest("button")) openAccountSheet();
 });
